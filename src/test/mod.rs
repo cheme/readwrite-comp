@@ -40,28 +40,28 @@ use std::cell::RefCell;
 /// a composition writer doing nothing
 pub struct Void;
 
-impl<W : Write> ExtWrite<W> for Void {
+impl ExtWrite for Void {
   #[inline]
-  fn write_header(&mut self, _ : &mut W) -> Result<()> {Ok(())}
+  fn write_header<W : Write>(&mut self, _ : &mut W) -> Result<()> {Ok(())}
   #[inline]
-  fn write_into(&mut self, w : &mut W, cont : &[u8]) -> Result<usize> {w.write(cont)}
+  fn write_into<W : Write>(&mut self, w : &mut W, cont : &[u8]) -> Result<usize> {w.write(cont)}
   #[inline]
-  fn write_end(&mut self, _ : &mut W) -> Result<()> {Ok(())}
+  fn write_end<W : Write>(&mut self, _ : &mut W) -> Result<()> {Ok(())}
 }
-impl<R : Read> ExtRead<R> for Void {
+impl ExtRead for Void {
   #[inline]
-  fn read_header(&mut self, _ : &mut R) -> Result<()> {Ok(())}
+  fn read_header<R : Read>(&mut self, _ : &mut R) -> Result<()> {Ok(())}
   #[inline]
-  fn read_from(&mut self, r : &mut R, buf : &mut[u8]) -> Result<usize> {
+  fn read_from<R : Read>(&mut self, r : &mut R, buf : &mut[u8]) -> Result<usize> {
     r.read(buf)
   }
   #[inline]
-  fn read_end(&mut self, _ : &mut R) -> Result<()> {Ok(())}
+  fn read_end<R : Read>(&mut self, _ : &mut R) -> Result<()> {Ok(())}
 
 }
 
 
-fn test_extwr<T : ExtWrite<Cursor<Vec<u8>>> + ExtRead<Cursor<Vec<u8>>>>(
+fn test_extwr<T : ExtWrite + ExtRead>(
 mut w : T,
 mut r : T,
 buf_len : usize,
@@ -117,7 +117,7 @@ expect : &[u8],
   Ok(())
 }
 
-fn test_comp_one<T : ExtWrite<Cursor<Vec<u8>>> + ExtRead<Cursor<Vec<u8>>>>(
+fn test_comp_one<T : ExtWrite + ExtRead>(
 mut w : T,
 mut r : T,
 buf_len : usize,
@@ -133,8 +133,8 @@ expect : &[u8],
     assert!(input[0].len() == try!(compw.write(input[0])));
     try!(compw.flush());
     assert!(input[1].len() == try!(compw.write(input[1])));
-  try!(compw.write_end());
- try!(compw.flush());
+    try!(compw.write_end());
+    try!(compw.flush()); 
     try!(CompW::suspend(compw))
   };
   try!(cout.write(&[123]));
@@ -202,7 +202,7 @@ expect : &[u8],
 /// test using end extread and extwrite 
 pub fn test_end_write<'a,'b,
   W : 'b + Write,
-  EW : ExtWrite<W>,
+  EW : ExtWrite,
 >(inp_length : usize, buf_length : usize, w : &mut W, ew : &mut EW) -> Result<Vec<u8>> {
   let mut rng = thread_rng();
   let mut write = CompW::new(w, ew);
@@ -240,7 +240,7 @@ pub fn test_end_write<'a,'b,
 /// endkind indicate if read can stop at end (for example endstream)
 pub fn test_end_read<'a,'b,
   R : 'a + Read,
-  ER : ExtRead<R>,
+  ER : ExtRead,
 >(reference : &[u8], inp_length : usize, buf_length : usize, r : &mut R, er : &mut ER, endkind : bool) -> Result<()> {
   let mut bufb = vec![0;buf_length];
   let buf = &mut bufb;
@@ -278,7 +278,6 @@ println!("C");
   assert!(i >= inp_length);
   
 //  if endkind {
-  // for some endcontent we could have read more
   let ni = try!(bwr.read(buf));
   println!("nini{} {:?}",ni, &buf[..]);
   assert!(ni >= 1);

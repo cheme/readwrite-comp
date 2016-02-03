@@ -45,11 +45,11 @@ impl EndStream {
   pub fn new(winsize : usize) -> Self { EndStream(winsize, winsize) }
 }
 
-impl<W : Write> ExtWrite<W> for EndStream {
+impl ExtWrite for EndStream {
   #[inline]
-  fn write_header(&mut self, _ : &mut W) -> Result<()> {self.1 = self.0; Ok(())}
+  fn write_header<W : Write>(&mut self, _ : &mut W) -> Result<()> {self.1 = self.0; Ok(())}
   #[inline]
-  fn write_into(&mut self, w : &mut W, cont : &[u8]) -> Result<usize> {
+  fn write_into<W : Write>(&mut self, w : &mut W, cont : &[u8]) -> Result<usize> {
     let mut ix = 0;
     while ix < cont.len() {
       let l = if self.1 + ix < cont.len() {
@@ -69,7 +69,7 @@ impl<W : Write> ExtWrite<W> for EndStream {
   }
 
   #[inline]
-  fn write_end(&mut self, r : &mut W) -> Result<()> {
+  fn write_end<W : Write>(&mut self, r : &mut W) -> Result<()> {
     println!("In endstream write_end {}", self.1);
     // padd
     let mut buffer = [0; 256];
@@ -87,13 +87,13 @@ impl<W : Write> ExtWrite<W> for EndStream {
   }
 }
 
-impl<R : Read> ExtRead<R> for EndStream {
+impl ExtRead for EndStream {
   #[inline]
-  fn read_header(&mut self, _ : &mut R) -> Result<()> {
+  fn read_header<R : Read>(&mut self, _ : &mut R) -> Result<()> {
     self.1 = self.0; 
     Ok(())}
   #[inline]
-  fn read_from(&mut self, r : &mut R, buf : &mut[u8]) -> Result<usize> {
+  fn read_from<R : Read>(&mut self, r : &mut R, buf : &mut[u8]) -> Result<usize> {
     if self.1 == 0 {
 println!("readO");
       return Ok(0)
@@ -127,7 +127,7 @@ println!("ok00000");
     Ok(l)
   }
   #[inline]
-  fn read_end(&mut self, r : &mut R) -> Result<()> {
+  fn read_end<R : Read>(&mut self, r : &mut R) -> Result<()> {
     println!("In endstream read_end {}", self.1);
     if self.1 == 0 {
       self.1 = self.0;
