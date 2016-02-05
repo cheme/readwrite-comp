@@ -29,6 +29,9 @@
 #[cfg(test)]
 mod test;
 
+#[cfg(test)]
+extern crate rand;
+
 use std::io::{
   Write,
   Read,
@@ -59,6 +62,56 @@ pub trait ExtWrite<W : Write> {
   fn write_end(&mut self, &mut W) -> Result<()>;
 
 }
+
+/// this trait could be use to rebase CompW and enable end_read to without having to rely on drop
+/// (drop is bad as errorless).
+pub trait WriteEnd {
+  fn write_end(&mut self) -> Result<()>;
+}
+pub struct CompW2<'a, 'b, W : 'a + Write + WriteEnd, EW : 'b + ExtWrite<W>>(&'a mut W, &'b mut EW, CompWState);
+impl<'a, 'b, W : 'a + Write + WriteEnd, EW : 'b + ExtWrite<W>> WriteEnd for CompW2<'a,'b,W,EW> {
+   #[inline]
+  fn write_end(&mut self) -> Result<()> {
+    if let CompWState::HeadWritten = self.2 {
+      try!(self.1.write_end(self.0));
+      try!(self.0.write_end());
+      self.2 = CompWState::Initial;
+    }
+    Ok(())
+  }
+}
+/// wrapper to use write as writeend, should never be use on a writeend or writeend will not run
+pub struct WETmp<'a,W : 'a + Write>(&'a mut W);
+impl<'a, W : 'a + Write> WriteEnd for WETmp<'a,W> {
+   #[inline]
+  fn write_end(&mut self) -> Result<()> { Ok(()) }
+}
+impl<'a, W : 'a + Write> Write for WETmp<'a,W> {
+   #[inline]
+  fn write(&mut self, cont: &[u8]) -> Result<usize> {
+    self.0.write(cont)
+  }
+   #[inline]
+  fn flush(&mut self) -> Result<()> {
+    self.0.flush()
+  }
+}
+
+impl<'a, 'b, W : 'a + Write + WriteEnd, EW : 'b + ExtWrite<W>> CompW2<'a,'b,W,EW> {
+
+  #[inline]
+  pub fn new(w : &'a mut W, ew : &'b mut EW) -> Self {
+    CompW2(w,ew,CompWState::Initial)
+  }
+}
+/* cannot as wetmp need to be instantiated out of new last for ref : see if as ref...
+impl<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite<WETmp<'a,W>>> CompW2<'a,'b,WETmp<'a,W>,EW> {
+
+  #[inline]
+  pub fn new_last(w : &'a mut W, ew : &'b mut EW) -> Self {
+    CompW2(WETmp(w),ew,CompWState::Initial)
+  }
+}*/
 
 /// Compose over a reader with additional possibility to read an end content
 pub trait ExtRead<R : Read> {
@@ -102,13 +155,42 @@ pub enum CompRState {
 ///
 /// This is used in many place with short lifecycle, it would be interesting to evaluate the 
 /// overhead (or see if it is optimized).
+/// TODO when a bit stable switch &'b mut EW to AsRef<'b,EW> to allow simplier nested CompW.
+/// (without care to lifetime)
 pub struct CompW<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite<W>>(&'a mut W, &'b mut EW, CompWState);
+
+/// CompW with several (undefined number at compile time) Write of same kind to chain, and a dest
+/// write.
+/// Drop semantic for use as write cannot be enable (inner temporary use of MCompW would write_end
+/// at each write).
+/// This could be use for layered write (for example in a multilayer ssl tunnel).
+///
+/// Suspend (up to W) and write end will impact all layer.
+///
+/// TODO fn to remove one layer with ok write end (similar to suspend but with)
+pub struct MCompW;
+
+/// this is only MCompW but with the droppable interface added (only run MCompW).
+/// This is for cases where we need to use MCompW as a Writer and could not call write_end.
+/// (for instance if the writer is stored with its components TODO might not make to much sense as
+/// in those case we would certainly embed object and their related ExtW -> own MCompW instead like
+/// : like put writer in a map and when drop from map it write_end.
+/// Own CompW without suspend.
+/// TODO so supend should be for owned content
+/// not owned does not require suspend (&'mut are still alive you just need to ensure it writes
+/// end (not for inner of MComp)) 
+///
+/// In fact We should hack and run internal MCompW with a InitState before drop and with a
+/// headWritten state when we already write head (cf shadow &'a[bool])a : use state instead of bool
+pub struct MCompWD;
 
 /// Base construct to build a read upon another one (composable reader).
 pub struct CompR<'a, 'b, R : 'a + Read, ER : 'b + ExtRead<R>>(&'a mut R, &'b mut ER, CompRState);
 
 
-/// drop finalize but without catching possible issue TODO error mgmt?? include logger ?
+/// drop finalize but without catching possible issue TODO error mgmt?? include logger ? Or upt to
+/// ExtWrite write_end implementation to be safe (return allways ok and synch over shared variable
+/// like arcmut or jus rc cell and have something else managing this error
 impl<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite<W>> Drop for CompW<'a,'b,W,EW> {
   fn drop(&mut self) {
     self.write_end();
@@ -132,9 +214,12 @@ impl<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite<W>> CompW<'a,'b,W,EW> {
 
   #[inline]
   /// suspend write (inner writer is available again) but keep reference for subsequent write in same state
-  pub fn suspend(self) -> Result<(&'b mut EW, CompWState)> {
+  pub fn suspend(mut self) -> Result<(&'b mut EW, CompWState)> {
     // manually to catch error instead of drop
-    try!(self.1.write_end(self.0));
+    if let CompWState::HeadWritten = self.2 {
+      try!(self.1.write_end(self.0));
+      self.2 = CompWState::Initial;
+    }
     Ok((self.1,self.2.clone()))
   }
 
@@ -166,9 +251,12 @@ impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead<R>> CompR<'a,'b,R,ER> {
   }
 
   #[inline]
-  pub fn suspend(self) -> Result<(&'b mut ER, CompRState)> {
+  pub fn suspend(mut self) -> Result<(&'b mut ER, CompRState)> {
     // manually to catch error instead of drop
-    try!(self.1.read_end(self.0));
+    if let CompRState::HeadRead = self.2 {
+      try!(self.1.read_end(self.0));
+      self.2 = CompRState::Initial;
+    }
     Ok((self.1,self.2.clone()))
   }
 
@@ -180,10 +268,12 @@ impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead<R>> CompR<'a,'b,R,ER> {
   #[inline]
   /// as there is no flush in read read end will be called out of Read interface
   pub fn read_end(&mut self) -> Result<()> {
+
     if let CompRState::HeadRead = self.2 {
       try!(self.1.read_end(self.0));
       self.2 = CompRState::Initial;
     }
+ 
     Ok(())
   }
 /*
@@ -223,6 +313,7 @@ impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead<R>> Read for CompR<'a,'b,R,ER> {
   fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
     match self.2 {
       CompRState::Initial => {
+
           try!(self.1.read_header(self.0));
           self.2 = CompRState::HeadRead;
       },

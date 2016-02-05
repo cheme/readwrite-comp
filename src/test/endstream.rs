@@ -39,8 +39,7 @@ fn test_endstream () {
 /// Second is counter of byte written for this window.
 pub struct EndStream(usize,usize); 
 
-
-pub type CEndStream<'a,'b,A> = CompW<'a,'b,EndStream,A>;
+pub type CEndStream<'a,'b,A> = CompW<'a,'b,A,EndStream>;
 
 impl EndStream {
   pub fn new(winsize : usize) -> Self { EndStream(winsize, winsize) }
@@ -71,6 +70,7 @@ impl<W : Write> ExtWrite<W> for EndStream {
 
   #[inline]
   fn write_end(&mut self, r : &mut W) -> Result<()> {
+    println!("In endstream write_end {}", self.1);
     // padd
     let mut buffer = [0; 256];
     while self.1 != 0 {
@@ -95,9 +95,10 @@ impl<R : Read> ExtRead<R> for EndStream {
   #[inline]
   fn read_from(&mut self, r : &mut R, buf : &mut[u8]) -> Result<usize> {
     if self.1 == 0 {
-
+println!("readO");
       return Ok(0)
     }
+println!("nonreadO");
     let l = if self.1 < buf.len() {
       try!(r.read(&mut buf[..self.1]))
     } else {
@@ -116,7 +117,8 @@ impl<R : Read> ExtRead<R> for EndStream {
         // ended window, need header for next (stuck to ret 0 up to read_end call)
         // the point of this write : getting a read at 0 at some point for unknow content read (for
         // instance encyphered bytes).
-        return Ok(0)
+println!("ok00000");
+        return Ok(l)
       } else {
         // read next window
         self.1 = self.0;
@@ -126,6 +128,7 @@ impl<R : Read> ExtRead<R> for EndStream {
   }
   #[inline]
   fn read_end(&mut self, r : &mut R) -> Result<()> {
+    println!("In endstream read_end {}", self.1);
     if self.1 == 0 {
       self.1 = self.0;
       Ok(())
@@ -137,12 +140,13 @@ impl<R : Read> ExtRead<R> for EndStream {
         } else {
           try!(r.read(&mut buffer[..self.1]))
         };
+    println!("read_end {}", l);
         self.1 -= l;
       }
       let ww = try!(r.read(&mut buffer[..1]));
       if ww != 1 || buffer[0] != 0 {
         println!("ww{}",buffer[0]);
-        Err(Error::new(ErrorKind::Other, "End read does not find expected terminal 0 of widows"))
+        Err(Error::new(ErrorKind::Other, "End read does not find expected terminal 0 of windows"))
       } else {
         self.1 = self.0;
         Ok(())

@@ -18,6 +18,10 @@ use std::io::{
   ErrorKind,
 };
 
+use rand::thread_rng;
+use rand::Rng;
+
+
 pub mod endstream;
 pub mod ciph;
 
@@ -30,6 +34,8 @@ use self::endstream::{
   EndStream,
   CEndStream,
 };
+
+use std::cell::RefCell;
 
 /// a composition writer doing nothing
 pub struct Void;
@@ -122,17 +128,17 @@ expect : &[u8],
   let size_second = input[2].len() + input[3].len();
   let mut cout = Cursor::new(Vec::new());
   {
-//  let state = {
+  let state = {
     let mut compw = CompW::new(&mut cout,&mut w);
     assert!(input[0].len() == try!(compw.write(input[0])));
     try!(compw.flush());
     assert!(input[1].len() == try!(compw.write(input[1])));
   try!(compw.write_end());
  try!(compw.flush());
-//    try!(CompW::suspend(compw))
-//  };
-  //try!(cout.write(&[123]));
- // let mut compw = CompW::resume(state, &mut cout);
+    try!(CompW::suspend(compw))
+  };
+  try!(cout.write(&[123]));
+  let mut compw = CompW::resume(&mut cout, state);
   assert!(input[2].len() == try!(compw.write(input[2])));
   assert!(input[3].len() == try!(compw.write(input[3])));
 //  try!(compw.write_end());
@@ -141,13 +147,39 @@ expect : &[u8],
   let mut cin = cout;
     println!("{:?}", cin.get_ref());
   cin.set_position(0);
-  let mut compr = CompR::new(&mut cin, &mut r);
-  let mut res = Vec::new();
+
   let mut rl = size_first;
+  println!("ss{}",size_first);
   let mut l = 0;
+  let mut res = Vec::new();
   let mut vbuf = vec![0;buf_len];
-  let mut first = true;
   let buf = &mut vbuf[..];
+  let state = {
+    let mut compr = CompR::new(&mut cin, &mut r);
+    while {
+      l = if rl == 0 {
+        0
+      } else if rl < buf.len() {
+        try!(compr.read(&mut buf[..rl]))
+      } else {
+        try!(compr.read(buf))
+      };
+      l != 0
+    } {
+      res.extend_from_slice(&buf[..l]);
+      rl = rl - l;
+    };
+    println!("bef re");
+    try!(compr.suspend())
+  };
+    println!("aft re");
+  let mut compr = {
+    try!(cin.read(&mut buf[..1]));
+    assert!(123 == buf[0]);
+    CompR::resume(&mut cin, state)
+  };
+  rl = size_second;
+  println!("ss{}",size_second);
   while {
     l = if rl == 0 {
       0
@@ -160,93 +192,118 @@ expect : &[u8],
   } {
     res.extend_from_slice(&buf[..l]);
     rl = rl - l;
-    if rl == 0 {
-      if first {
-     //   compr.set_end(); // looking for new header
-        first = false;
-        rl = size_second;
-      };
-      try!(compr.read_end()); // looking for new header
-      
-    };
   }
+  try!(compr.read_end()); // looking for new header
+
   assert!(&res[..] == expect);
   Ok(())
 }
-/*
-pub fn test_end<'a,'b,
-  R : 'a + Read,
+
+/// test using end extread and extwrite 
+pub fn test_end_write<'a,'b,
   W : 'b + Write,
-  ER : 'a + ExtRead<'a,R>,
-  EW : 'b + ExtWrite<'b,W>,
->(inp_length : usize, buf_length : usize, w : &mut EW, r : &mut ER) -> Result<()> {
-  let mut rng = OsRng::new().unwrap();
-  let mut outputb = Cursor::new(Vec::new());
+  EW : ExtWrite<W>,
+>(inp_length : usize, buf_length : usize, w : &mut W, ew : &mut EW) -> Result<Vec<u8>> {
+  let mut rng = thread_rng();
+  let mut write = CompW::new(w, ew);
   let mut reference = Cursor::new(Vec::new());
-  let output = &mut outputb;
   let mut bufb = vec![0;buf_length];
   let buf = &mut bufb;
-  // knwoledge of size to write
+
   let mut i = 0;
   while inp_length > i {
     rng.fill_bytes(buf);
-    if !bwr.has_started() {
-      try!(bwr.start_write(output));
-    };
     let ww = if inp_length - i < buf.len() {
       try!(reference.write(&buf[..inp_length - i]));
-      try!(bwr.b_write(output,&buf[..inp_length - i])) 
+      try!(write.write(&buf[..inp_length - i])) 
     } else {
       try!(reference.write(buf));
-      try!(bwr.b_write(output,buf))
+      try!(write.write(buf))
     };
     assert!(ww != 0);
     i += ww;
   }
-  try!(bwr.end_write(output));
-  // write next content
-  rng.fill_bytes(buf);
-  let endcontent = buf[0];
-  println!("EndContent{}",endcontent);
-  try!(output.write(&buf[..1]));
-  output.flush();
+  println!("first");
+  try!(write.write_end());
+  // write next content : allways same for check of next ok
+  
+  buf[0] = 123;
+  try!(write.write(&buf[..1]));
+  println!("befflush");
+  write.flush();
 
-println!("Written lenght : {}", output.get_ref().len());
-  // no knowledge of size to read
-  output.set_position(0);
-  let input = output;
+  println!("second");
+  Ok(reference.into_inner())
+}
+
+/// test using end extread and extwrite 
+/// endkind indicate if read can stop at end (for example endstream)
+pub fn test_end_read<'a,'b,
+  R : 'a + Read,
+  ER : ExtRead<R>,
+>(reference : &[u8], inp_length : usize, buf_length : usize, r : &mut R, er : &mut ER, endkind : bool) -> Result<()> {
+  let mut bufb = vec![0;buf_length];
+  let buf = &mut bufb;
+
+ 
   let mut rr = 1;
-  i = 0;
+  let mut i = 0;
+  let mut bwr = CompR::new(r, er);
   while rr != 0 {
-    rr = try!(bwr.b_read(input,buf));
+    if i + buf.len() > inp_length && !endkind {
+      // read exact
+
+      rr = try!(bwr.read(&mut buf[..inp_length - i]));
+    } else {
+      rr = try!(bwr.read(buf));
+    }
     // it could go over reference as no knowledge (if padding)
     // inp length is here only to content assertion
-    println!("i {} rr {} inpl {}",i,rr,inp_length);
     if rr != 0 {
     if i + rr > inp_length {
       if inp_length > i {
         let padstart = inp_length - i;
         println !("pad start {}",padstart);
-        assert!(buf[..padstart] == reference.get_ref()[i..]);
+        assert!(buf[..padstart] == reference[i..]);
       } // else the window is bigger than buffer and padding is being read
     } else {
-      assert!(buf[..rr] == reference.get_ref()[i..i + rr]);
+      assert!(buf[..rr] == reference[i..i + rr]);
     }
     }
     i += rr;
   }
 println!("C");
-  try!(bwr.end_read(input));
+  try!(bwr.read_end());
+  println!("{} >={}",i,inp_length);
   assert!(i >= inp_length);
-println!("D");
-  let ni = try!(input.read(buf));
-  assert!(ni == 1);
-  assert!(endcontent == buf[0]);
+  
+//  if endkind {
+  // for some endcontent we could have read more
+  let ni = try!(bwr.read(buf));
+  println!("nini{} {:?}",ni, &buf[..]);
+  assert!(ni >= 1);
+  assert!(123 == buf[0]);
+
+ // }
+ 
   Ok(())
 
-}*/
+}
 
 
+#[test]
+fn test_void_enr () {
+  let mut inner = Cursor::new(Vec::new());
+  let mut vw = Void;
+  let mut vr = Void;
+  let reference = test_end_write
+    (123, 32, &mut inner, &mut vw).unwrap();
+// inplength, buf length, write, extw 
+  inner.set_position(0);
+  test_end_read
+    (&reference[..],
+     123, 23, &mut inner, &mut vr, false).unwrap();
+}
 
 #[test]
 fn test_void () {
@@ -268,7 +325,7 @@ fn test_void () {
 
 
 /// As a type alias no need to have R an W variant (no type constraint on type alias yet)
-type CVoid<'a,'b,A> = CompW<'a,'b,Void,A>;
+type CVoid<'a,'b,A> = CompW<'a,'b,A,Void>;
 /// compose of EndStream over ciph
 /// As a type alias no need to have R an W variant (no type constraint on type alias yet)
 /// To use End read_end fonctionality it needs to be an outer one (otherwhise read end could not be
@@ -278,32 +335,123 @@ type EndCiph<'a,'b,A> = CEndStream<'a,'b,CCiph<'b,'b,A>>;
 /// EndCiph + Void for three layer
 type EndCiphVoid<'a,'b,A> = EndCiph<'a,'b,CVoid<'b,'b,A>>;
 
+type Cuvec = Cursor<Vec<u8>>;
+
+fn checktype1 (_ : &CVoid<Cuvec>) {
+}
+
+fn checktype2 (_ : &CEndStream<CCiph<Cuvec>>) {
+}
 #[test]
 fn test_suspend() {
-  let mut w = Cursor::new(Vec::new());
+  let mut w : Cuvec = Cursor::new(Vec::new());
   let mut v = Void;
   let state = {
-  let mut void = CompW::new(&mut w, &mut v);
+  let mut void : CVoid<Cuvec> = CompW::new(&mut w, &mut v);
+  checktype1(&void);
   void.write(&[0]);
   void.suspend().unwrap()
   };
   w.write(&[0]);
-  let mut void = CompW::resume(&mut w, state);
+  let mut void : CVoid<Cuvec> = CompW::resume(&mut w, state);
   void.write(&[0]);
 }
-/*
+
 #[test]
 fn test_suspend2() {
-  let mut w = Cursor::new(Vec::new());
+  let mut w : Cuvec = Cursor::new(Vec::new());
   let mut c = Ciph::new(1,1);
   let mut e = EndStream::new(1);
-  let state = {
-  let mut ECV = CompW::new(&mut CompW::new(&mut w, &mut v));
-  void.write(&[0]);
-  void.suspend().unwrap()
+  let (state,statein) = {
+    let mut cyph : CCiph<Cuvec> = CompW::new(&mut w, &mut c);
+    let state = {
+      let mut endcyph : CEndStream<CCiph<Cuvec>> = CompW::new(&mut cyph, &mut e);
+      checktype2(&endcyph);
+      endcyph.write(&[0]);
+      endcyph.suspend().unwrap()
+    };
+    cyph.write(&[0]);
+    let state2 = {
+    let mut endcyph : CEndStream<CCiph<Cuvec>> = CompW::resume(&mut cyph, state);
+
+    // here check the type
+
+    endcyph.write(&[0]);
+    endcyph.suspend().unwrap()
+    };
+    (cyph.suspend().unwrap(),state2)
   };
   w.write(&[0]);
-  let mut void = CompW::resume(&mut w, state);
-  void.write(&[0]);
+  let mut cyph : CCiph<Cuvec> = CompW::resume(&mut w, state);
+  cyph.write(&[0]);
+  let mut endcyph : CEndStream<CCiph<Cuvec>> = CompW::resume(&mut cyph, statein);
+  endcyph.write(&[0]);
+  //let mut void = CompW::resume(&mut w, state);
+  //void.write(&[0]);
 }
-*/
+
+#[test]
+fn test_ciph() {
+  let towrite_size = 123;
+  let ciphbuf = 7;
+  let mut inner = Cursor::new(Vec::new());
+  let reference = {
+  let mut c = Ciph::new(3,ciphbuf);
+  test_end_write
+    (towrite_size, 32, &mut inner, &mut c).unwrap()
+  };
+  
+  inner.set_position(0);
+  let mut cr = Ciph::new(0,ciphbuf);
+ 
+  test_end_read
+    (&reference[..],
+     towrite_size, 23, &mut inner, &mut cr, false).unwrap();
+}
+
+#[test]
+fn test_endstream() {
+  let towrite_size = 123;
+  let ciphbuf = 7;
+  let mut inner = Cursor::new(Vec::new());
+  let reference = {
+  let mut c = EndStream::new(15);
+  test_end_write
+    (towrite_size, 32, &mut inner, &mut c).unwrap()
+  };
+  
+  inner.set_position(0);
+  let mut cr = EndStream::new(15);
+ 
+  test_end_read
+    (&reference[..],
+     towrite_size, 23, &mut inner, &mut cr, true).unwrap();
+
+}
+
+
+#[test]
+fn test_enstremciph() {
+  let towrite_size = 23;
+  let window_size = 15;
+  let ciphbuf = 7;
+  let mut inner = Cursor::new(Vec::new());
+  let reference = {
+  let mut c = Ciph::new(3,ciphbuf);
+  let mut e = EndStream::new(window_size);
+  let mut cyphw : CCiph<Cuvec> = CompW::new(&mut inner, &mut c);
+  test_end_write
+    (towrite_size, 32, &mut cyphw, &mut e).unwrap()
+  };
+  
+  inner.set_position(0);
+  let mut cr = Ciph::new(0,ciphbuf);
+  let mut er = EndStream::new(window_size);
+  let mut cyphr = CompR::new(&mut inner, &mut cr);
+ 
+  test_end_read
+    (&reference[..],
+     towrite_size, 23, &mut cyphr, &mut er, true).unwrap(); // true for outer endstream
+
+}
+

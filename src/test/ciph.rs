@@ -47,7 +47,7 @@ fn test_ciph () {
 /// write buff must be of same size).
 pub struct Ciph(u8, Vec<u8>, usize); 
 
-pub type CCiph<'a,'b,A> = CompW<'a,'b,Ciph,A>;
+pub type CCiph<'a,'b,A> = CompW<'a,'b,A,Ciph>;
 
 impl Ciph {
   pub fn new(shift : u8, bufsize : usize) -> Self { 
@@ -99,6 +99,7 @@ impl<W : Write> ExtWrite<W> for Ciph {
 
   #[inline]
   fn write_end(&mut self, w : &mut W) -> Result<()> {
+    println!("In ciph write_end {}", self.2);
     if self.2 == 0 {
 
         println!("write6");
@@ -128,6 +129,7 @@ impl<W : Write> ExtWrite<W> for Ciph {
 impl<R : Read> ExtRead<R> for Ciph {
   #[inline]
   fn read_header(&mut self, r : &mut R) -> Result<()> {
+    println!("in read heder");
     let buf = &mut [9];
     let l = try!(r.read(buf));
     if l != 1 {
@@ -174,6 +176,7 @@ impl<R : Read> ExtRead<R> for Ciph {
   }
   #[inline]
   fn read_end(&mut self, r : &mut R) -> Result<()> {
+    println!("In ciph read_end {}", self.2);
     let buf = &mut [9];
         println!("readend");
     let l = try!(r.read(buf));
