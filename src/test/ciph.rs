@@ -195,6 +195,7 @@ fn test_ciph () {
 /// The implementation only shift when buffer is full and add 0 bit padding to finalize (read and
 /// write buff must be of same size).
 /// Last is end char (default to 6)
+#[derive(Clone)]
 pub struct Ciph(u8, Vec<u8>, usize, u8); 
 
 pub type CCiph<'a,'b,A> = CompW<'a,'b,A,Ciph>;
@@ -259,7 +260,7 @@ impl ExtWrite for Ciph {
     if self.2 == 0 {
 
         println!("write6");
-    try!(w.write(&[6]));
+    try!(w.write(&[self.3]));
       return Ok(())
     }
     // write buffer (all buffer so end is padding)
@@ -298,6 +299,7 @@ impl ExtRead for Ciph {
   }
   #[inline]
   fn read_from<R : Read>(&mut self, r : &mut R, buf : &mut[u8]) -> Result<usize> {
+
     if buf.len() == 0 {
       return Ok(0);
     }
@@ -309,7 +311,13 @@ impl ExtRead for Ciph {
         let l = try!(r.read(&mut self.1[tot..]));
         println!("read {}",l);
         if l == 0 {
+          if self.2 == 0 {
+            // a multiple buf has been written but nothing could be read : we consider that it is
+            // no error (for instance with end stream)
+            return Ok(0);
+          } else {
            return Err(Error::new(ErrorKind::Other, "No bytes (encode should have written block buffer multiple content"));
+          }
         }
         tot += l;
         self.2 += l;

@@ -5,8 +5,12 @@ use super::{
   ExtRead,
   CompWState,
   CompRState,
+  CompExtR,
+  CompExtW,
   CompW,
   CompR,
+  MultiW,
+  MultiR,
 };
 
 use std::io::{
@@ -453,4 +457,76 @@ fn test_enstremciph() {
      towrite_size, 23, &mut cyphr, &mut er, true).unwrap(); // true for outer endstream
 
 }
+
+/// as EndStream is blocking for read and Ciph is not, and both write end content, 
+/// using CompExtW<Ciph, EndStream> is not possible : ciph will write end before endstream blocking
+/// end, then when reading ciph end will be ignored and after ublocking will be queried.
+/// This would have been possible if ciph end method was blocking or if ciph does not write end
+/// (true for most cipher where flush add the padding).
+fn inst_ciph_end_mult () -> (Vec<CompExtW<EndStream, Ciph>>, Vec<CompExtR<EndStream, Ciph>>) {
+  let c1 = Ciph::new_with_endval(1,3,4);
+  let c2 = Ciph::new_with_endval(2,2,5);
+  let c3 = Ciph::new_with_endval(3,5,6);
+  let e1 = EndStream::new(5);
+  let e2 = EndStream::new(3);
+  let e3 = EndStream::new(4);
+  (
+  //vec![CompExtW(c3.clone(),e3.clone()),CompExtW(c2.clone(),e2.clone()),CompExtW(c1.clone(),e1.clone())],
+  //vec![CompExtR(c3,e3),CompExtR(c2,e2),CompExtR(c1,e1)]
+  vec![CompExtW(e3.clone(),c3.clone()),CompExtW(e2.clone(),c2.clone()),CompExtW(e1.clone(),c1.clone())],
+  vec![CompExtR(e3,c3),CompExtR(e2,c2),CompExtR(e1,c1)]
+  )
+}
+
+#[test]
+fn test_ciph_end_mult () {
+  let (mut ciphs,mut ciphsr) = inst_ciph_end_mult ();
+  let mut w = Cursor::new(Vec::new());
+  { // write end in drop
+    let mut mciphs = MultiW::new(&mut w, &mut ciphs);
+    println!("actual write");
+    mciphs.write(&[123]);
+    mciphs.write_end();
+    mciphs.write(&[25]);
+  };
+  println!("debug mciphs {:?}",w.get_ref());
+//[123, 0, 1, 0, 0, 1, 0, 0, 0, 25, 0, 1, 0, 0, 1, 0, 0, 0]
+
+ 
+  // bigger buf than content
+  let mut buf = vec![0;w.get_ref().len() + 10];
+ 
+  let mut w = Cursor::new(w.into_inner());
+  { 
+    let mut mciphs = MultiR::new(&mut w, &mut ciphsr);
+    let mut  r = mciphs.read(&mut buf[..]).unwrap();
+    println!("first{:?} {:?}",r,&buf[..10]);
+    assert!(buf[0] == 123);
+    // consume all kind of padding
+    while r != 0 {
+      let or = mciphs.read(&mut buf[..]);
+    println!("while{:?} {:?}",or,&buf[..10]);
+      if !or.is_ok() {
+        mciphs.2 = vec![CompRState::Initial] // avoid double panick TODO bug??
+      }
+      assert!(or.is_ok(), "Error : {:?}",or);
+      r = or.unwrap();
+    }
+
+    //assert!(mciphs.read(&mut buf[..]).unwrap() == 0);
+    println!("FIRST readend");
+    // manual read end to catch error
+    assert!(mciphs.read_end().is_ok());
+    assert!(buf[0] != 25);
+    r = mciphs.read(&mut buf[..]).unwrap();
+    // has it sop before
+    assert!(buf[0] == 25);
+    while r != 0 {
+      r = mciphs.read(&mut buf[..]).unwrap();
+    }
+    assert!(mciphs.read(&mut buf[..]).unwrap() == 0);
+  };
+
+}
+
 

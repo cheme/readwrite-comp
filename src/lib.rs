@@ -23,6 +23,28 @@
 //!
 //! Semantically the library add 
 //! 
+//! Current issue with this crate
+//! - drop cause panic in panic when read_end / write_end panic : leading to no clue about the issue
+//! - flush is not recursive : only the extWrite flush, the inner writer does not : TODO add a bool
+//! in flush_into to say if inner writer must be flush : that way on drop inner writer will not be
+//! flush (but still contain end_write), and have the composition flush flush all the way. Plus
+//! expose in object (CompW, MultiComp) this boolean. CompExtW is already recursive by default and
+//! should stay like that.
+//! : inner writer must flush at each layer. (MultiW flush until the inner writer of course)
+//! - flush and write_end semantic is tricky : flush means that no counterpart is needed in read
+//!   (we can flush anywhere without a failure from read) whereas write_end involve a read_end need.
+//!   Read_end is triggered manually with two cases :
+//!   - we know the length to read (for instance a serialized object read from a reader) : that is
+//!   easy and not a big issue
+//!   - we do not know the length (for instance proxy of encrypted content) : then a reader like
+//!   endstream could be used and read will block when seeing a end content by returning Ok(0)
+//!   until read_end is used to unlock the reading. There is a serious limitition here when
+//!   composing this kind of bloquing reader with non bloquing reader having some end content : the bloquing one must be in
+//!   the internal layer, otherwhise the end sequence of the non bloquing will be skipped (this is 
+//!   a somehow tricky case but also not so common (some cipher does not require end as using flush
+//!   is enough (endstream may still be used for perf when proxying content that we do not want to
+//!   read)).
+//! - symetry between read and write is not enforced, non symetric implementation will fail
 //!
 #![feature(slice_bytes)] // TODO deprecated from 1.6
 
@@ -654,6 +676,7 @@ impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> Read for MultiR<'a,'b,R,ER> {
     self.inner().read(buf)
   }
 }
+
 impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> Drop for MultiR<'a,'b,R,ER> {
   fn drop(&mut self) {
     if self.2.len() != 0 { // after suspend

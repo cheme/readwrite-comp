@@ -10,6 +10,8 @@ use ::{
   ExtWrite,
   ExtRead,
   CompW,
+  MultiW,
+  MultiR,
 };
 use super::{
   test_extwr,
@@ -28,15 +30,115 @@ fn test_endstream () {
   &[&vec![1,2,3],&vec![4,5],&vec![6,7,8],&vec![9]],
   &[1,2,3,4,5,6,7,8,9]
   ).unwrap();
-
 }
 
 
+#[test]
+fn test_multendstream_dec_windows () {
+  let c1 = EndStream::new(2);
+  let c2 = EndStream::new(3);
+  let c3 = EndStream::new(4);
+  let mut ciphs = [c3,c2,c1];
+  let mut w = Cursor::new(Vec::new());
+  { // write end in drop
+    let mut mciphs = MultiW::new(&mut w, &mut ciphs);
+    println!("actual write");
+    mciphs.write(&[123]);
+    mciphs.write_end();
+    mciphs.write(&[25]);
+  };
+  println!("debug mciphs {:?}",w.get_ref());
+//[123, 0, 1, 0, 0, 1, 0, 0, 0, 25, 0, 1, 0, 0, 1, 0, 0, 0]
+
+//  assert!(&[123,0,1,
+
+
+  let c1 = EndStream::new(2);
+  let c2 = EndStream::new(3);
+  let c3 = EndStream::new(4);
+  let mut ciphs = [c3,c2,c1];
+ 
+  // bigger buf than content
+  let mut buf = vec![0;w.get_ref().len() + 10];
+ 
+  let mut w = Cursor::new(w.into_inner());
+  { 
+    let mut mciphs = MultiR::new(&mut w, &mut ciphs);
+    let mut  r = mciphs.read(&mut buf[..]).unwrap();
+    assert!(buf[0] == 123);
+    // consume all kind of padding
+    while r != 0 {
+      r = mciphs.read(&mut buf[..]).unwrap();
+    }
+    assert!(mciphs.read(&mut buf[..]).unwrap() == 0);
+    println!("FIRST readend");
+    // manual read end to catch error
+    assert!(mciphs.read_end().is_ok());
+    assert!(buf[0] != 25);
+    r = mciphs.read(&mut buf[..]).unwrap();
+    // has it sop before
+    assert!(buf[0] == 25);
+    while r != 0 {
+      r = mciphs.read(&mut buf[..]).unwrap();
+    }
+    assert!(mciphs.read(&mut buf[..]).unwrap() == 0);
+  };
+
+}
+
+#[test]
+fn test_multendstream_inc_windows () {
+  let c1 = EndStream::new(7);
+  let c2 = EndStream::new(4);
+  let c3 = EndStream::new(2);
+  let mut ciphs = [c3,c2,c1];
+  let mut w = Cursor::new(Vec::new());
+  { // write end in drop
+    let mut mciphs = MultiW::new(&mut w, &mut ciphs);
+    println!("actual write");
+    mciphs.write(&[123]);
+    mciphs.write_end();
+    mciphs.write(&[25]);
+  };
+  println!("debug mciphs {:?}",w.get_ref());
+  let c1 = EndStream::new(7);
+  let c2 = EndStream::new(4);
+  let c3 = EndStream::new(2);
+  let mut ciphs = [c3,c2,c1];
+ 
+  // bigger buf than content
+  let mut buf = vec![0;w.get_ref().len() + 10];
+ 
+  let mut w = Cursor::new(w.into_inner());
+  { 
+    let mut mciphs = MultiR::new(&mut w, &mut ciphs);
+    let mut  r = mciphs.read(&mut buf[..]).unwrap();
+    assert!(buf[0] == 123);
+    // consume all kind of padding
+    while r != 0 {
+      r = mciphs.read(&mut buf[..]).unwrap();
+    }
+    assert!(mciphs.read(&mut buf[..]).unwrap() == 0);
+    println!("FIRST readend");
+    // manual read end to catch error
+    assert!(mciphs.read_end().is_ok());
+    assert!(buf[0] != 25);
+    r = mciphs.read(&mut buf[..]).unwrap();
+    // has it sop before
+    assert!(buf[0] == 25);
+    while r != 0 {
+      r = mciphs.read(&mut buf[..]).unwrap();
+    }
+    assert!(mciphs.read(&mut buf[..]).unwrap() == 0);
+  };
+
+}
 
 /// a writer with end byte usage (we read content and need to stop at some point without knowing
 /// what is in content). After N read byte if 0 end if 1 continu for N next bytes.
 /// First is window size (renewable with padding if flushed or end).
 /// Second is counter of byte written for this window.
+#[derive(Clone)]
 pub struct EndStream(usize,usize); 
 
 pub type CEndStream<'a,'b,A> = CompW<'a,'b,A,EndStream>;
@@ -70,9 +172,9 @@ impl ExtWrite for EndStream {
 
   #[inline]
   fn write_end<W : Write>(&mut self, r : &mut W) -> Result<()> {
-    println!("In endstream write_end {}", self.1);
-    // padd
-    let mut buffer = [0; 256];
+    println!("In endstream write_end {} {}", self.0, self.1);
+    // padd with 2 for easier frame read (0 stop 1 continue
+    let mut buffer = [2; 256];
     while self.1 != 0 {
       let l = if self.1 > 256 {
         try!(r.write(&mut buffer))
@@ -94,6 +196,7 @@ impl ExtRead for EndStream {
     Ok(())}
   #[inline]
   fn read_from<R : Read>(&mut self, r : &mut R, buf : &mut[u8]) -> Result<usize> {
+
     if self.1 == 0 {
 println!("readO");
       return Ok(0)
@@ -128,7 +231,7 @@ println!("ok00000");
   }
   #[inline]
   fn read_end<R : Read>(&mut self, r : &mut R) -> Result<()> {
-    println!("In endstream read_end {}", self.1);
+    println!("In endstream read_end {} {}", self.0, self.1);
     if self.1 == 0 {
       self.1 = self.0;
       Ok(())
