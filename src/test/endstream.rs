@@ -11,7 +11,11 @@ use ::{
   ExtRead,
   CompW,
   MultiW,
+  MultiWExt,
+  new_multiw,
   MultiR,
+  MultiRExt,
+  new_multir,
 };
 use super::{
   test_extwr,
@@ -41,7 +45,8 @@ fn test_multendstream_dec_windows () {
   let mut ciphs = [c3,c2,c1];
   let mut w = Cursor::new(Vec::new());
   { // write end in drop
-    let mut mciphs = MultiW::new(&mut w, &mut ciphs);
+    let mut mciphsext = MultiWExt::new(&mut ciphs);
+    let mut mciphs = new_multiw(&mut w, &mut mciphsext);
     println!("actual write");
     mciphs.write(&[123]);
     mciphs.write_end();
@@ -63,7 +68,8 @@ fn test_multendstream_dec_windows () {
  
   let mut w = Cursor::new(w.into_inner());
   { 
-    let mut mciphs = MultiR::new(&mut w, &mut ciphs);
+    let mut mciphsext = MultiRExt::new(&mut ciphs);
+    let mut mciphs = new_multir(&mut w, &mut mciphsext);
     let mut  r = mciphs.read(&mut buf[..]).unwrap();
     assert!(buf[0] == 123);
     // consume all kind of padding
@@ -94,7 +100,8 @@ fn test_multendstream_inc_windows () {
   let mut ciphs = [c3,c2,c1];
   let mut w = Cursor::new(Vec::new());
   { // write end in drop
-    let mut mciphs = MultiW::new(&mut w, &mut ciphs);
+    let mut mciphsext = MultiWExt::new(&mut ciphs);
+    let mut mciphs = new_multiw(&mut w, &mut mciphsext);
     println!("actual write");
     mciphs.write(&[123]);
     mciphs.write_end();
@@ -111,7 +118,8 @@ fn test_multendstream_inc_windows () {
  
   let mut w = Cursor::new(w.into_inner());
   { 
-    let mut mciphs = MultiR::new(&mut w, &mut ciphs);
+    let mut mciphsext = MultiRExt::new(&mut ciphs);
+    let mut mciphs = new_multir(&mut w, &mut mciphsext);
     let mut  r = mciphs.read(&mut buf[..]).unwrap();
     assert!(buf[0] == 123);
     // consume all kind of padding

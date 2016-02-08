@@ -75,8 +75,9 @@ pub trait ExtWrite {
   fn write_into<W : Write>(&mut self, &mut W, &[u8]) -> Result<usize>;
 
   /// Could add end content (padding...) only if read can manage it
+  /// does not flush recursivly
   #[inline]
-  fn flush_into<W : Write>(&mut self, w : &mut W) -> Result<()> {w.flush()}
+  fn flush_into<W : Write>(&mut self, w : &mut W) -> Result<()> {Ok(())}
 
   /// write content at the end of stream. Read will be able to read it with a call to read_end.
   /// To use in a pure read write context, this is call on CompW Drop and should generally not need to be called manually.
@@ -146,7 +147,7 @@ pub enum CompRState {
 /// For composing with full support for write_end, consider only one layer of CompW and composing 
 /// the ExtWrit with a CompExtW composition.
 ///
-pub struct CompW<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite>(&'a mut W, &'b mut EW, CompWState);
+pub struct CompW<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite>(pub &'a mut W, pub &'b mut EW, pub CompWState);
 
 /// inner struct for implemention just to apply method of sw in write
 struct CompExtWInner<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite>(&'a mut W, &'b mut EW);
@@ -192,7 +193,7 @@ impl<EW1 : ExtWrite, EW2 : ExtWrite> ExtWrite for CompExtW<EW1, EW2> {
 
 
 /// Base construct to build a read upon another one (composable reader).
-pub struct CompR<'a, 'b, R : 'a + Read, ER : 'b + ExtRead>(&'a mut R, &'b mut ER, CompRState);
+pub struct CompR<'a, 'b, R : 'a + Read, ER : 'b + ExtRead>(pub &'a mut R, pub &'b mut ER, pub CompRState);
 
 
 pub struct CompExtR<EW1 : ExtRead, EW2 : ExtRead>(EW1, EW2);
@@ -411,7 +412,8 @@ impl<'a, 'b, T : 'a + ReadTransportStream, S : 'b + Shadow> Read for ReadStreamS
 /// Order of layer is external layer last (the writer is therefore logicaly at the end of the
 /// array of layer).
 ///
-pub struct MultiW<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite>(&'a mut W, &'b mut[EW], Vec<CompWState>);
+pub type MultiW<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> = CompW<'a,'b,W,MultiWExt<'b,EW>>;
+pub struct MultiWExt<'a, EW : 'a + ExtWrite>(&'a mut[EW], Vec<CompWState>);
 
 /// TODO fn to remove one layer with ok write end (similar to suspend but with)
 /// MCompW is using drop to write end (for write use).
@@ -425,7 +427,9 @@ struct MCompW<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite>(&'a mut W, &'b mut[EW]
 
 
 /// Multiple layered read (similar to MCompW).
-pub struct MultiR<'a, 'b, R : 'a + Read, ER : 'b + ExtRead>(&'a mut R, &'b mut[ER], Vec<CompRState>);
+pub type MultiR<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> = CompR<'a,'b,R,MultiRExt<'b,ER>>;
+
+pub struct MultiRExt<'a, ER : 'a + ExtRead>(&'a mut[ER], Vec<CompRState>);
 
 struct MCompR<'a, 'b, R : 'a + Read, ER : 'b + ExtRead>(&'a mut R, &'b mut[ER], &'b mut [CompRState]);
 
@@ -522,85 +526,54 @@ impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> MCompR<'a,'b,R,ER> {
   }
 }
 
+#[inline]
+pub fn new_multiw<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> 
+  (w : &'a mut W, ew : &'b mut MultiWExt<'b,EW>) -> MultiW<'a,'b,W,EW> {
+    CompW::new(w, ew)
+}
+#[inline]
+pub fn new_multir<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> 
+  (r : &'a mut R, er : &'b mut MultiRExt<'b,ER>) -> MultiR<'a,'b,R,ER> {
+    CompR::new(r, er)
+}
 
-impl<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> MultiW<'a,'b,W,EW> {
+/*
+// TODO try a box new multiw (compw need to use as_ref))
+pub fn new_multiw<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> 
+  (w : &'a mut W, ew : &'b mut [EW]) -> MultiW<'a,'b,W,EW> {
+    CompW::new(w, Box::new(MultiWExt::new(ew)))
+}
+*/
+impl<'a, EW : 'a + ExtWrite> MultiWExt<'a,EW> {
   #[inline]
-  fn inner<'c>(&'c mut self) -> MCompW<'c,'c,W,EW> {
-    MCompW(self.0,self.1,&mut self.2[..])
+  fn inner<'c,'b, W : Write>(&'c mut self, w : &'b mut W) -> MCompW<'b,'c,W,EW> {
+    MCompW(w,self.0,&mut self.1[..])
   }
   #[inline]
-  pub fn write_header(&mut self) -> Result<()> {
-    self.inner().write_header()
-  }
-  #[inline]
-  pub fn write_end(&mut self) -> Result<()> {
-    self.inner().write_end()
-  }
-  #[inline]
-  pub fn new(w : &'a mut W, ew : &'b mut [EW]) -> Self {
+  pub fn new(ew : &'a mut [EW]) -> Self {
     let state = Self::init_state(ew);
-    MultiW(w,ew,state)
+    MultiWExt(ew,state)
   }
 
   #[inline]
   pub fn init_state(ew : &mut [EW]) -> Vec<CompWState> {
     vec![CompWState::Initial; ew.len()]
   }
-  #[inline]
-  /// suspend write (inner writer is available again) but keep reference for subsequent write in same state
-  pub fn suspend(mut self) -> Result<(&'b mut [EW], Vec<CompWState>)> {
-    // manually to catch error instead of drop
-    if let Some(&CompWState::HeadWritten) = self.2.get(0) {
-      let mut i = self.inner();
-      try!(i.write_end()); // return to init state before drop
-      try!(i.flush());
-    }
-    let r = replace(&mut self.2,vec![CompWState::Initial]);
-    Ok((self.1,r))
-  }
-
-  #[inline]
-  pub fn resume(with : &'a mut W, from : (&'b mut [EW], Vec<CompWState>)) -> Self {
-    MultiW(with, from.0,from.1)
-  }
 }
 
-impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> MultiR<'a,'b,R,ER> {
+impl<'a, ER : 'a + ExtRead> MultiRExt<'a,ER> {
   #[inline]
-  fn inner<'c>(&'c mut self) -> MCompR<'c,'c,R,ER> {
-    MCompR(self.0,self.1,&mut self.2[..])
+  fn inner<'c,'b,R : Read>(&'c mut self, r : &'b mut R) -> MCompR<'b,'c,R,ER> {
+    MCompR(r,self.0,&mut self.1[..])
   }
   #[inline]
-  pub fn read_header(&mut self) -> Result<()> {
-    self.inner().read_header()
-  }
-  #[inline]
-  pub fn read_end(&mut self) -> Result<()> {
-    self.inner().read_end()
-  }
-  #[inline]
-  pub fn new(w : &'a mut R, ew : &'b mut [ER]) -> Self {
+  pub fn new(ew : &'a mut [ER]) -> Self {
     let state = Self::init_state(ew);
-    MultiR(w,ew,state)
+    MultiRExt(ew,state)
   }
   #[inline]
   pub fn init_state(ew : &mut [ER]) -> Vec<CompRState> {
     vec![CompRState::Initial; ew.len()]
-  }
-  #[inline]
-  /// suspend write (inner writer is available again) but keep reference for subsequent write in same state
-  pub fn suspend(mut self) -> Result<(&'b mut [ER], Vec<CompRState>)> {
-    // manually to catch error instead of drop
-    if let Some(&CompRState::HeadRead) = self.2.get(0) {
-      let mut i = self.inner();
-      try!(i.read_end()); // return to init state before drop
-    }
-    let r = replace(&mut self.2,vec![CompRState::Initial]);
-    Ok((self.1,r))
-  }
-  #[inline]
-  pub fn resume(with : &'a mut R, from : (&'b mut [ER], Vec<CompRState>)) -> Self {
-    MultiR(with, from.0,from.1)
   }
 }
 
@@ -648,46 +621,40 @@ impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> Read for MCompR<'a,'b,R,ER> {
 
 }
 
-impl<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> Write for MultiW<'a,'b,W,EW> {
-
-
+impl<'a, EW : 'a + ExtWrite> ExtWrite for MultiWExt<'a,EW> {
   #[inline]
-  fn write(&mut self, cont: &[u8]) -> Result<usize> {
-    self.inner().write(cont)
+  fn write_header<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    self.inner(w).write_header()
   }
   #[inline]
-  fn flush(&mut self) -> Result<()> {
-    self.inner().flush()
+  fn write_end<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    self.inner(w).write_end()
   }
-}
-impl<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> Drop for MultiW<'a,'b,W,EW> {
-  fn drop(&mut self) {
-    if self.2.len() != 0 { // after suspend
-      if let CompWState::HeadWritten = self.2[0] {
-        self.inner().write_end();
-        self.inner().flush();
-      }
-    }
-  }
-}
-impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> Read for MultiR<'a,'b,R,ER> {
+
   #[inline]
-  fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-    self.inner().read(buf)
+  fn write_into<W : Write>(&mut self, w : &mut W, cont: &[u8]) -> Result<usize> {
+    self.inner(w).write(cont)
+  }
+  #[inline]
+  fn flush_into<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    self.inner(w).flush()
   }
 }
 
-impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> Drop for MultiR<'a,'b,R,ER> {
-  fn drop(&mut self) {
-    if self.2.len() != 0 { // after suspend
-      if let CompRState::HeadRead = self.2[0] {
-        self.inner().read_end();
-      }
-    }
+impl<'a, EW : 'a + ExtRead> ExtRead for MultiRExt<'a,EW> {
+//impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> Read for MultiR<'a,'b,R,ER> {
+  #[inline]
+  fn read_from<R : Read>(&mut self, r : &mut R, buf: &mut [u8]) -> Result<usize> {
+    self.inner(r).read(buf)
+  }
+  #[inline]
+  fn read_header<R : Read>(&mut self, r : &mut R) -> Result<()> {
+    self.inner(r).read_header()
+  }
+  #[inline]
+  fn read_end<R : Read>(&mut self, r : &mut R) -> Result<()> {
+    self.inner(r).read_end()
   }
 }
-
-
-
 
 

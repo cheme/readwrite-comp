@@ -11,6 +11,10 @@ use super::{
   CompR,
   MultiW,
   MultiR,
+  MultiWExt,
+  new_multiw,
+  MultiRExt,
+  new_multir,
 };
 
 use std::io::{
@@ -483,7 +487,8 @@ fn test_ciph_end_mult () {
   let (mut ciphs,mut ciphsr) = inst_ciph_end_mult ();
   let mut w = Cursor::new(Vec::new());
   { // write end in drop
-    let mut mciphs = MultiW::new(&mut w, &mut ciphs);
+    let mut mciphsext = MultiWExt::new(&mut ciphs);
+    let mut mciphs = new_multiw(&mut w, &mut mciphsext);
     println!("actual write");
     mciphs.write(&[123]);
     mciphs.write_end();
@@ -498,7 +503,8 @@ fn test_ciph_end_mult () {
  
   let mut w = Cursor::new(w.into_inner());
   { 
-    let mut mciphs = MultiR::new(&mut w, &mut ciphsr);
+    let mut mciphsext = MultiRExt::new(&mut ciphsr);
+    let mut mciphs = new_multir(&mut w, &mut mciphsext);
     let mut  r = mciphs.read(&mut buf[..]).unwrap();
     println!("first{:?} {:?}",r,&buf[..10]);
     assert!(buf[0] == 123);
@@ -507,7 +513,7 @@ fn test_ciph_end_mult () {
       let or = mciphs.read(&mut buf[..]);
     println!("while{:?} {:?}",or,&buf[..10]);
       if !or.is_ok() {
-        mciphs.2 = vec![CompRState::Initial] // avoid double panick TODO bug??
+        mciphs.2 = CompRState::Initial // avoid double panick TODO bug??
       }
       assert!(or.is_ok(), "Error : {:?}",or);
       r = or.unwrap();
