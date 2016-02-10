@@ -36,10 +36,10 @@ fn test_multiciph_w () {
   let c1 = Ciph::new_with_endval(1,3,4);
   let c2 = Ciph::new_with_endval(2,2,5);
   let c3 = Ciph::new_with_endval(3,5,6);
-  let mut ciphs = [c3,c2,c1];
+  let mut ciphs = vec![c3,c2,c1];
   let mut w = Cursor::new(Vec::new());
   { // write end in drop
-    let mut mciphsext = MultiWExt::new(&mut ciphs);
+    let mut mciphsext = MultiWExt::new(ciphs);
     let mut mciphs = new_multiw(&mut w, &mut mciphsext);
  
     println!("actual write");
@@ -62,10 +62,10 @@ fn test_multiciph_r () {
   let c1 = Ciph::new_with_endval(1,3,4);
   let c2 = Ciph::new_with_endval(2,2,5);
   let c3 = Ciph::new_with_endval(3,5,6);
-  let mut ciphs = [c3,c2,c1];
+  let mut ciphs = vec![c3,c2,c1];
   let mut w = Cursor::new(vec!(1, 3, 6, 129, 6, 6, 6, 6, 9, 8, 6, 10, 9, 4));
   { 
-    let mut mciphsext = MultiRExt::new(&mut ciphs);
+    let mut mciphsext = MultiRExt::new(ciphs);
     let mut mciphs = new_multir(&mut w, &mut mciphsext);
 
     let mut buf = [0];

@@ -42,10 +42,10 @@ fn test_multendstream_dec_windows () {
   let c1 = EndStream::new(2);
   let c2 = EndStream::new(3);
   let c3 = EndStream::new(4);
-  let mut ciphs = [c3,c2,c1];
+  let mut ciphs = vec![c3,c2,c1];
   let mut w = Cursor::new(Vec::new());
   { // write end in drop
-    let mut mciphsext = MultiWExt::new(&mut ciphs);
+    let mut mciphsext = MultiWExt::new(ciphs);
     let mut mciphs = new_multiw(&mut w, &mut mciphsext);
     println!("actual write");
     mciphs.write(&[123]);
@@ -61,14 +61,14 @@ fn test_multendstream_dec_windows () {
   let c1 = EndStream::new(2);
   let c2 = EndStream::new(3);
   let c3 = EndStream::new(4);
-  let mut ciphs = [c3,c2,c1];
+  let mut ciphs = vec![c3,c2,c1];
  
   // bigger buf than content
   let mut buf = vec![0;w.get_ref().len() + 10];
  
   let mut w = Cursor::new(w.into_inner());
   { 
-    let mut mciphsext = MultiRExt::new(&mut ciphs);
+    let mut mciphsext = MultiRExt::new(ciphs);
     let mut mciphs = new_multir(&mut w, &mut mciphsext);
     let mut  r = mciphs.read(&mut buf[..]).unwrap();
     assert!(buf[0] == 123);
@@ -97,10 +97,10 @@ fn test_multendstream_inc_windows () {
   let c1 = EndStream::new(7);
   let c2 = EndStream::new(4);
   let c3 = EndStream::new(2);
-  let mut ciphs = [c3,c2,c1];
+  let mut ciphs = vec![c3,c2,c1];
   let mut w = Cursor::new(Vec::new());
   { // write end in drop
-    let mut mciphsext = MultiWExt::new(&mut ciphs);
+    let mut mciphsext = MultiWExt::new(ciphs);
     let mut mciphs = new_multiw(&mut w, &mut mciphsext);
     println!("actual write");
     mciphs.write(&[123]);
@@ -111,14 +111,14 @@ fn test_multendstream_inc_windows () {
   let c1 = EndStream::new(7);
   let c2 = EndStream::new(4);
   let c3 = EndStream::new(2);
-  let mut ciphs = [c3,c2,c1];
+  let mut ciphs = vec![c3,c2,c1];
  
   // bigger buf than content
   let mut buf = vec![0;w.get_ref().len() + 10];
  
   let mut w = Cursor::new(w.into_inner());
   { 
-    let mut mciphsext = MultiRExt::new(&mut ciphs);
+    let mut mciphsext = MultiRExt::new(ciphs);
     let mut mciphs = new_multir(&mut w, &mut mciphsext);
     let mut  r = mciphs.read(&mut buf[..]).unwrap();
     assert!(buf[0] == 123);

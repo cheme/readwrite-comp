@@ -13,7 +13,6 @@ use super::{
   MultiR,
   MultiWExt,
   new_multiw,
-  new_multiwown,
   MultiRExt,
   new_multir,
 };
@@ -488,15 +487,13 @@ fn test_ciph_end_mult () {
   let (mut ciphs,mut ciphsr) = inst_ciph_end_mult ();
   let mut w = Cursor::new(Vec::new());
   { // write end in drop
-    //let mut mciphsext = MultiWExt::new(&mut ciphs);
-    //let mut mciphs = new_multiw(&mut w, &mut mciphsext);
+    let mut mciphsext = MultiWExt::new(ciphs);
+    let mut mciphs = new_multiw(&mut w, &mut mciphsext);
 
-    let mut mciphs = new_multiwown(&mut w, ciphs);
     println!("actual write");
     mciphs.write(&[123]);
     mciphs.write_end();
     mciphs.write(&[25]);
-    mciphs.write_end(); // no drop for mciphs
   };
   println!("debug mciphs {:?}",w.get_ref());
 //[123, 0, 1, 0, 0, 1, 0, 0, 0, 25, 0, 1, 0, 0, 1, 0, 0, 0]
@@ -507,7 +504,7 @@ fn test_ciph_end_mult () {
  
   let mut w = Cursor::new(w.into_inner());
   { 
-    let mut mciphsext = MultiRExt::new(&mut ciphsr);
+    let mut mciphsext = MultiRExt::new(ciphsr);
     let mut mciphs = new_multir(&mut w, &mut mciphsext);
     let mut  r = mciphs.read(&mut buf[..]).unwrap();
     println!("first{:?} {:?}",r,&buf[..10]);
