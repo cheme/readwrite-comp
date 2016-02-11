@@ -152,7 +152,8 @@ pub struct CompW<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite>(pub &'a mut W, pub 
 //pub struct CompWOwn<'a, W : 'a + Write, EW : ExtWrite>(pub &'a mut W, pub EW, pub CompWState);
 
 /// inner struct for implemention just to apply method of sw in write
-struct CompExtWInner<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite>(&'a mut W, &'b mut EW);
+/// This is not to be use directly as write but just to use write_into and flush_into
+pub struct CompExtWInner<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite>(pub &'a mut W, pub &'b mut EW);
 
 impl<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> Write for CompExtWInner<'a, 'b, W, EW> {
   #[inline]
@@ -198,7 +199,7 @@ impl<EW1 : ExtWrite, EW2 : ExtWrite> ExtWrite for CompExtW<EW1, EW2> {
 pub struct CompR<'a, 'b, R : 'a + Read, ER : 'b + ExtRead>(pub &'a mut R, pub &'b mut ER, pub CompRState);
 
 
-pub struct CompExtR<EW1 : ExtRead, EW2 : ExtRead>(EW1, EW2);
+pub struct CompExtR<EW1 : ExtRead, EW2 : ExtRead>(pub EW1, pub EW2);
 impl<EW1 : ExtRead, EW2 : ExtRead> ExtRead for CompExtR<EW1, EW2> {
   #[inline]
   fn read_header<R : Read>(&mut self, r : &mut R) -> Result<()> {
@@ -219,7 +220,10 @@ impl<EW1 : ExtRead, EW2 : ExtRead> ExtRead for CompExtR<EW1, EW2> {
 
 }
 
-struct CompExtRInner<'a, 'b, R : 'a + Read, ER : 'b + ExtRead>(&'a mut R, &'b mut ER);
+/// Inner construct to build a read upon another one, do not use as write if you need automatic
+/// header or automatic end (technical).
+pub struct CompExtRInner<'a, 'b, R : 'a + Read, ER : 'b + ExtRead>(pub &'a mut R, pub &'b mut ER);
+
 impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> Read for CompExtRInner<'a,'b,R,ER> {
   #[inline]
   fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
