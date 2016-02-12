@@ -21,6 +21,69 @@ use super::{
   test_extwr,
   test_comp_one,
 };
+#[test]
+fn test_read_end_multi_pad () {
+  let mut ew = EndStream::new(2);
+  let mut ew2 = EndStream::new(2);
+  let mut er = EndStream::new(2);
+  let mut content = vec![1,2,3];
+  let mut oute = Cursor::new(Vec::new());
+{ 
+  let out = &mut oute;
+  ew.write_header(out).unwrap();
+  ew.write_into(out, &mut content).unwrap();
+  ew.write_end(out).unwrap();
+  ew.flush_into(out).unwrap();
+  println!("{:?}", out.get_ref());
+  assert!(out.get_ref().len() == 6); // 1 2 1 (for next) 3 rpad 0
+}
+  oute.set_position(0);
+  assert!(er.read_end(&mut oute).is_ok());
+ 
+}
+ 
+#[test]
+fn test_constant_size () {
+  let mut ew = EndStream::new(2);
+  let mut ew2 = EndStream::new(2);
+  let mut er = EndStream::new(2);
+  let mut content = vec![1,2,3];
+  let mut oute = Cursor::new(Vec::new());
+{ 
+  let out = &mut oute;
+  ew.write_header(out).unwrap();
+  ew.write_into(out, &mut content).unwrap();
+  ew.write_end(out).unwrap();
+  ew.flush_into(out).unwrap();
+  println!("{:?}", out.get_ref());
+  assert!(out.get_ref().len() == 6); // 1 2 1 (for next) 3 rpad 0
+}
+  oute.set_position(0);
+  let mut ine =  oute;
+  let mut oute = Cursor::new(Vec::new());
+
+{ 
+  let inp = &mut ine;
+  let out = &mut oute;
+  let mut buf = vec![0;3];
+  let mut sr = 1;
+  er.read_header(inp);
+  ew2.write_header(out);
+  while sr != 0 {
+    sr = er.read_from(inp,&mut buf[..]).unwrap();
+    if sr != 0 {
+    println!("w : {:?}", &buf[..sr]);
+    ew2.write_into(out,&buf[..sr]);
+    }
+  }
+  er.read_end(inp);
+  ew2.write_end(out);
+  ew2.flush_into(out);
+  println!("{:?}", out.get_ref());
+  assert!(out.get_ref().len() == 6); // 1 2 1 (for next) 3 rpad 0
+}
+}
+
 
 #[test]
 fn test_endstream () {
@@ -56,7 +119,6 @@ fn test_multendstream_dec_windows () {
 //[123, 0, 1, 0, 0, 1, 0, 0, 0, 25, 0, 1, 0, 0, 1, 0, 0, 0]
 
 //  assert!(&[123,0,1,
-
 
   let c1 = EndStream::new(2);
   let c2 = EndStream::new(3);
@@ -162,6 +224,13 @@ impl ExtWrite for EndStream {
   fn write_into<W : Write>(&mut self, w : &mut W, cont : &[u8]) -> Result<usize> {
     let mut ix = 0;
     while ix < cont.len() {
+
+      if self.1 == 0 {
+        // non 0 (terminal) value
+        try!(w.write(&[1]));
+        self.1 = self.0;
+      }
+
       let l = if self.1 + ix < cont.len() {
         try!(w.write(&cont[ix..ix + self.1]))
       } else {
@@ -169,11 +238,6 @@ impl ExtWrite for EndStream {
       };
       ix += l;
       self.1 -= l;
-      if self.1 == 0 {
-        // non 0 (terminal) value
-        try!(w.write(&[1]));
-        self.1 = self.0;
-      }
     };
     Ok(ix)
   }
@@ -245,23 +309,27 @@ println!("ok00000");
       Ok(())
     } else {
       let mut buffer = [0; 256];
-      while self.1 != 0 {
-        let l = if self.1 > 256 {
-          try!(r.read(&mut buffer))
-        } else {
-          try!(r.read(&mut buffer[..self.1]))
-        };
-    println!("read_end {}", l);
-        self.1 -= l;
-      }
-      let ww = try!(r.read(&mut buffer[..1]));
-      if ww != 1 || buffer[0] != 0 {
-        println!("ww{}",buffer[0]);
-        Err(Error::new(ErrorKind::Other, "End read does not find expected terminal 0 of windows"))
-      } else {
+      buffer[0] = 1;
+      while buffer[0] != 0 {
+
+        while self.1 != 0 {
+          let l = if self.1 > 256 {
+            try!(r.read(&mut buffer))
+          } else {
+            try!(r.read(&mut buffer[..self.1]))
+          };
+      println!("read_end {}", l);
+          self.1 -= l;
+        }
+
+        let ww = try!(r.read(&mut buffer[..1]));
         self.1 = self.0;
-        Ok(())
+        if ww != 1  {
+          println!("ww{}",buffer[0]);
+          return Err(Error::new(ErrorKind::Other, "End read does not find expected terminal 0 of windows"))
+        }
       }
+      Ok(())
     }
   }
 
