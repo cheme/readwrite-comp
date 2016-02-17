@@ -59,6 +59,8 @@ use std::io::{
   Write,
   Read,
   Result,
+  Error,
+  ErrorKind,
 };
 use std::ops::Drop;
 use std::mem::replace;
@@ -74,6 +76,20 @@ pub trait ExtWrite {
 
   /// write buffer.
   fn write_into<W : Write>(&mut self, &mut W, &[u8]) -> Result<usize>;
+
+  /// write all
+  fn write_all_into<W : Write>(&mut self, w : &mut W, mut buf : &[u8]) -> Result<()> {
+    while !buf.is_empty() {
+      match self.write_into(w, buf) {
+        Ok(0) => return Err(Error::new(ErrorKind::WriteZero,
+                    "failed to write whole buffer")),
+        Ok(n) => buf = &buf[n..],
+        Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
+        Err(e) => return Err(e),
+      }
+    }
+    Ok(())
+  }
 
   /// Could add end content (padding...) only if read can manage it
   /// does not flush recursivly
@@ -105,6 +121,24 @@ pub trait ExtRead {
 
   /// read in buffer.
   fn read_from<R : Read>(&mut self, &mut R, &mut[u8]) -> Result<usize>;
+
+  /// read exact
+  fn read_exact_from<R : Read>(&mut self, r : &mut R, mut buf: &mut[u8]) -> Result<()> {
+    while !buf.is_empty() {
+      match self.read_from(r,buf) {
+        Ok(0) => break,
+        Ok(n) => { let tmp = buf; buf = &mut tmp[n..]; }
+        Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
+        Err(e) => return Err(e),
+      }
+    }
+    if !buf.is_empty() {
+      Err(Error::new(ErrorKind::UnexpectedEof,
+                  "failed to fill whole buffer"))
+    } else {
+      Ok(())
+    }
+  }
 
   /// read end bytes (and possibly update internal state).
   /// To use in a pure read write context, this is call on CompR Drop and should generally not need to be called manually.
@@ -164,6 +198,11 @@ impl<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> Write for CompExtWInner<'a, 'b,
   fn flush(&mut self) -> Result<()> {
     self.1.flush_into(self.0)
   }
+  #[inline]
+  fn write_all(&mut self, cont: &[u8]) -> Result<()> {
+    self.1.write_all_into(self.0, cont)
+  }
+ 
 }
 
 /// Compose two ExtWrite in a single on with Owned ExtWrite.
@@ -181,6 +220,10 @@ impl<EW1 : ExtWrite, EW2 : ExtWrite> ExtWrite for CompExtW<EW1, EW2> {
   #[inline]
   fn write_into<W : Write>(&mut self, w : &mut W, cont : &[u8]) -> Result<usize> {
     self.0.write_into(&mut CompExtWInner(w, &mut self.1),cont)
+  }
+  #[inline]
+  fn write_all_into<W : Write>(&mut self, w : &mut W, mut cont : &[u8]) -> Result<()> {
+    self.0.write_all_into(&mut CompExtWInner(w, &mut self.1),cont)
   }
   #[inline]
   fn flush_into<W : Write>(&mut self, w : &mut W) -> Result<()> {
@@ -213,6 +256,11 @@ impl<EW1 : ExtRead, EW2 : ExtRead> ExtRead for CompExtR<EW1, EW2> {
   }
 
   #[inline]
+  fn read_exact_from<R : Read>(&mut self, r : &mut R, mut buf: &mut[u8]) -> Result<()> {
+    self.0.read_exact_from(&mut CompExtRInner(r, &mut self.1),buf)
+  }
+
+  #[inline]
   fn read_end<R : Read>(&mut self, r : &mut R) -> Result<()> {
     try!(self.0.read_end(&mut CompExtRInner(r, &mut self.1)));
     self.1.read_end(r)
@@ -228,6 +276,11 @@ impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> Read for CompExtRInner<'a,'b,R,ER
   #[inline]
   fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
     self.1.read_from(self.0, buf)
+  }
+
+  #[inline]
+  fn read_exact(&mut self, buf: &mut [u8]) -> Result<()> {
+    self.1.read_exact_from(self.0, buf)
   }
 }
  
