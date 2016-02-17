@@ -24,3 +24,4 @@ Status
 
 Used in [mydht](https://github.com/cheme/mydht).
 
+[Documentation](http://cheme.github.io/readwrite-comp/).
