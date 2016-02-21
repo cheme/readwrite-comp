@@ -6,24 +6,36 @@
 //! The library uses std::io::write and std::io::read for basis, but semantically Write and Read 
 //! implementation requires a bit of care (see examples).
 //!
-//! Write implementation should write
-//! all at once (all my test case run with this asumption but this lib code should run fine if
-//! not).
-//! Write ext trait is using header and an header is write again between each flush. Semantically
-//! flush got extended meaning and consequently should not be called anywhere. 
-//! For instance when
-//! chaining two Write flush of the next one is never call when the first one flushed (this way we
-//! could safely use it as a writer and flush after use. Chain flush is still use for MCompW
-//! but only until the last writer and MCompR could use end_read symetrically (which CompR cannot
-//! do (unless if decomposed : but out of its write/read trait context)).
-//! 
-//! Read implementation should retun the read size, and if read return 0 it means that the reading
+//! Ext trait add a possible header writing/reading and a possible end of message writing/reading. 
+//!
+//! Read implementation should return the read size, and if read return 0 it means that the reading
 //! is finished. (read ext trait should finalize the read (waiting for a new header)).
 //!
 //!
-//! Semantically the library add 
-//! 
-//! Current issue with this crate
+//! Most of this library is using WriteExt and ReadExt trait which allow to define additional
+//! action over standard read and write for example :
+//! - encyphering content : an additional header is required in most case.
+//! - adding info to content : like control, for instance an end of frame byte (required an end of
+//! message).
+//! - linking two reader or two writer (for instance CompExtW do it)
+//! The point is that WriteExt and ReadExt does not compose over the internal reader/writer to
+//! allow things such as MultiW or MultiR where we got a final Writer or final Reader but an
+//! undefined number of ExtWriter and ExtReader (and still static type without fat pointer).
+//!
+//! WriteExt and ReadExt could be composed, using MultiW/R or CopmExtW/R.
+//!
+//! WriteExt and ReadExt could be used as standard Reader or Writer by using CompW or CompR, 
+//!
+//! Composition by creating CompW of CompW as Writer and CompW as WriterExt is not really
+//! encouraged (even if some test are included) due to difficulty to write header or end of message
+//! recursivly (the first component is seen as a Read or a Write). CompW should in priority as a
+//! last wrapper.
+//! CompExtWInner and CompExtRInner are an alternative to CompW and CompR with less overhead but no
+//! guaranties over header and end of message. (first they was private but prove usefull in some
+//! cases).
+//!
+//!
+//! Current issue with this crate are
 //! - drop cause panic in panic when read_end / write_end panic : leading to no clue about the issue
 //! - flush is not recursive : only the extWrite flush, the inner writer does not : TODO add a bool
 //! in flush_into to say if inner writer must be flush : that way on drop inner writer will not be
@@ -46,8 +58,11 @@
 //!   read)).
 //! - symetry between read and write is not enforced, non symetric implementation will fail
 //!
-
-#![feature(slice_bytes)] // TODO deprecated from 1.6
+//!
+//! Example of usage could be found it tests, but also in mydht-base tunnel implementation,
+//! mydht-base bytes_wr and
+//! mydht shadow (for example mydht-openssl).
+//!
 
 #[cfg(test)]
 mod test;
@@ -63,7 +78,6 @@ use std::io::{
   ErrorKind,
 };
 use std::ops::Drop;
-use std::mem::replace;
 
 /// Write with further common functionnalities.
 /// 
@@ -94,7 +108,7 @@ pub trait ExtWrite {
   /// Could add end content (padding...) only if read can manage it
   /// does not flush recursivly
   #[inline]
-  fn flush_into<W : Write>(&mut self, w : &mut W) -> Result<()> {Ok(())}
+  fn flush_into<W : Write>(&mut self, _ : &mut W) -> Result<()> {Ok(())}
 
   /// write content at the end of stream. Read will be able to read it with a call to read_end.
   /// To use in a pure read write context, this is call on CompW Drop and should generally not need to be called manually.
@@ -222,7 +236,7 @@ impl<EW1 : ExtWrite, EW2 : ExtWrite> ExtWrite for CompExtW<EW1, EW2> {
     self.0.write_into(&mut CompExtWInner(w, &mut self.1),cont)
   }
   #[inline]
-  fn write_all_into<W : Write>(&mut self, w : &mut W, mut cont : &[u8]) -> Result<()> {
+  fn write_all_into<W : Write>(&mut self, w : &mut W, cont : &[u8]) -> Result<()> {
     self.0.write_all_into(&mut CompExtWInner(w, &mut self.1),cont)
   }
   #[inline]
@@ -283,7 +297,12 @@ impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> Read for CompExtRInner<'a,'b,R,ER
     self.1.read_exact_from(self.0, buf)
   }
 }
- 
+
+
+// TODO non mandatory log dependancy and a version of this which log errors
+#[inline]
+fn result_in_drop(_ : Result<()>) {
+}
 
 /// drop finalize but without catching possible issue TODO error mgmt?? include logger ? Or upt to
 /// ExtWrite write_end implementation to be safe (return allways ok and synch over shared variable
@@ -293,8 +312,8 @@ impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> Read for CompExtRInner<'a,'b,R,ER
 impl<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> Drop for CompW<'a,'b,W,EW> {
   fn drop(&mut self) {
     if let CompWState::HeadWritten = self.2 {
-      self.write_end();
-      self.flush();
+      result_in_drop(self.write_end());
+      result_in_drop(self.flush());
     }
   }
 }
@@ -304,7 +323,7 @@ impl<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> Drop for CompW<'a,'b,W,EW> {
 impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> Drop for CompR<'a,'b,R,ER> {
   fn drop(&mut self) {
     if let CompRState::HeadRead = self.2 {
-      self.read_end();
+      result_in_drop(self.read_end());
     }
   }
 }
@@ -512,7 +531,8 @@ impl<'a, 'b, T : 'a + ReadTransportStream, S : 'b + Shadow> Read for ReadStreamS
 /// Order of layer is external layer last (the writer is therefore logicaly at the end of the
 /// array of layer).
 ///
-pub type MultiW<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> = CompW<'a,'b,W,MultiWExt<EW>>;
+pub type MultiW<'a, 'b, W, EW> = CompW<'a,'b,W,MultiWExt<EW>>;
+//pub type MultiW<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> = CompW<'a,'b,W,MultiWExt<EW>>;
 
 pub struct MultiWExt<EW : ExtWrite>(Vec<EW>, Vec<CompWState>);
 
@@ -528,7 +548,8 @@ struct MCompW<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite>(&'a mut W, &'b mut[EW]
 
 
 /// Multiple layered read (similar to MCompW).
-pub type MultiR<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> = CompR<'a,'b,R,MultiRExt<ER>>;
+pub type MultiR<'a, 'b, R, ER> = CompR<'a,'b,R,MultiRExt<ER>>;
+//pub type MultiR<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> = CompR<'a,'b,R,MultiRExt<ER>>;
 
 pub struct MultiRExt<ER : ExtRead>(Vec<ER>, Vec<CompRState>);
 
@@ -561,11 +582,9 @@ impl<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> MCompW<'a,'b,W,EW> {
     match self.2[0] {
       CompWState::HeadWritten => {
  
-        println!("in write end of {:?}", self.1.len());
         if self.1.len() > 1 {
         if let Some((f,last)) = self.1.split_first_mut()  {
           let mut el = MCompW(self.0, last, &mut self.2[1..]);
-          println!("next write end of {:?}", el.1.len());
           try!(f.write_end(&mut el));
           try!(el.write_end());
         }

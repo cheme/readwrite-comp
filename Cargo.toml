@@ -9,9 +9,6 @@ homepage = "https://github.com/cheme/readwrite-ext/"
 repository = "https://github.com/cheme/readwrite-ext/"
 keywords =["Read","Write","compose","IO"]
 
-[features]
-nightly = []
-
 [dev-dependencies]
 rand = "0.3.11"
 

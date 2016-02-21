@@ -5,9 +5,9 @@ readwrite-comp
 
 Compose read and write stream processing over standard Read and Write.
 
-Extension for ::std::io::Read and ::std::io::Write, stack and chain writers readers.
+Extension for ::std::io::Read and ::std::io::Write to stack and chain writers readers.
 
-The library helps for composing action on bytes buffer when constrained by a Write interface (for instance cyphering bytes over a tcp writer).
+The library helps composing action on bytes buffer when constrained by a Write interface (for instance cyphering bytes over a tcp writer).
 
 Stacking writers or readers does not require additional buffer.
 
@@ -24,4 +24,7 @@ Status
 
 Used in [mydht](https://github.com/cheme/mydht).
 
-[Documentation](http://cheme.github.io/readwrite-comp/).
+Documentation
+-------------
+
+[API](http://cheme.github.io/readwrite-comp/).

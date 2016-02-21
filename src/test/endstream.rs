@@ -10,10 +10,10 @@ use ::{
   ExtWrite,
   ExtRead,
   CompW,
-  MultiW,
+  //MultiW,
   MultiWExt,
   new_multiw,
-  MultiR,
+  //MultiR,
   MultiRExt,
   new_multir,
 };
@@ -24,7 +24,6 @@ use super::{
 #[test]
 fn test_read_end_multi_pad () {
   let mut ew = EndStream::new(2);
-  let mut ew2 = EndStream::new(2);
   let mut er = EndStream::new(2);
   let mut content = vec![1,2,3];
   let mut oute = Cursor::new(Vec::new());
@@ -34,7 +33,6 @@ fn test_read_end_multi_pad () {
   ew.write_into(out, &mut content).unwrap();
   ew.write_end(out).unwrap();
   ew.flush_into(out).unwrap();
-  println!("{:?}", out.get_ref());
   assert!(out.get_ref().len() == 6); // 1 2 1 (for next) 3 rpad 0
 }
   oute.set_position(0);
@@ -55,7 +53,6 @@ fn test_constant_size () {
   ew.write_into(out, &mut content).unwrap();
   ew.write_end(out).unwrap();
   ew.flush_into(out).unwrap();
-  println!("{:?}", out.get_ref());
   assert!(out.get_ref().len() == 6); // 1 2 1 (for next) 3 rpad 0
 }
   oute.set_position(0);
@@ -67,19 +64,17 @@ fn test_constant_size () {
   let out = &mut oute;
   let mut buf = vec![0;3];
   let mut sr = 1;
-  er.read_header(inp);
-  ew2.write_header(out);
+  er.read_header(inp).unwrap();
+  ew2.write_header(out).unwrap();
   while sr != 0 {
     sr = er.read_from(inp,&mut buf[..]).unwrap();
     if sr != 0 {
-    println!("w : {:?}", &buf[..sr]);
-    ew2.write_into(out,&buf[..sr]);
+    ew2.write_into(out,&buf[..sr]).unwrap();
     }
   }
-  er.read_end(inp);
-  ew2.write_end(out);
-  ew2.flush_into(out);
-  println!("{:?}", out.get_ref());
+  er.read_end(inp).unwrap();
+  ew2.write_end(out).unwrap();
+  ew2.flush_into(out).unwrap();
   assert!(out.get_ref().len() == 6); // 1 2 1 (for next) 3 rpad 0
 }
 }
@@ -105,17 +100,16 @@ fn test_multendstream_dec_windows () {
   let c1 = EndStream::new(2);
   let c2 = EndStream::new(3);
   let c3 = EndStream::new(4);
-  let mut ciphs = vec![c3,c2,c1];
+  let ciphs = vec![c3,c2,c1];
   let mut w = Cursor::new(Vec::new());
   { // write end in drop
     let mut mciphsext = MultiWExt::new(ciphs);
     let mut mciphs = new_multiw(&mut w, &mut mciphsext);
-    println!("actual write");
-    mciphs.write(&[123]);
-    mciphs.write_end();
-    mciphs.write(&[25]);
+    mciphs.write(&[123]).unwrap();
+    mciphs.write_end().unwrap();
+    mciphs.write(&[25]).unwrap();
   };
-  println!("debug mciphs {:?}",w.get_ref());
+  //println!("debug mciphs {:?}",w.get_ref());
 //[123, 0, 1, 0, 0, 1, 0, 0, 0, 25, 0, 1, 0, 0, 1, 0, 0, 0]
 
 //  assert!(&[123,0,1,
@@ -123,7 +117,7 @@ fn test_multendstream_dec_windows () {
   let c1 = EndStream::new(2);
   let c2 = EndStream::new(3);
   let c3 = EndStream::new(4);
-  let mut ciphs = vec![c3,c2,c1];
+  let ciphs = vec![c3,c2,c1];
  
   // bigger buf than content
   let mut buf = vec![0;w.get_ref().len() + 10];
@@ -139,7 +133,6 @@ fn test_multendstream_dec_windows () {
       r = mciphs.read(&mut buf[..]).unwrap();
     }
     assert!(mciphs.read(&mut buf[..]).unwrap() == 0);
-    println!("FIRST readend");
     // manual read end to catch error
     assert!(mciphs.read_end().is_ok());
     assert!(buf[0] != 25);
@@ -159,21 +152,19 @@ fn test_multendstream_inc_windows () {
   let c1 = EndStream::new(7);
   let c2 = EndStream::new(4);
   let c3 = EndStream::new(2);
-  let mut ciphs = vec![c3,c2,c1];
+  let ciphs = vec![c3,c2,c1];
   let mut w = Cursor::new(Vec::new());
   { // write end in drop
     let mut mciphsext = MultiWExt::new(ciphs);
     let mut mciphs = new_multiw(&mut w, &mut mciphsext);
-    println!("actual write");
-    mciphs.write(&[123]);
-    mciphs.write_end();
-    mciphs.write(&[25]);
+    mciphs.write(&[123]).unwrap();
+    mciphs.write_end().unwrap();
+    mciphs.write(&[25]).unwrap();
   };
-  println!("debug mciphs {:?}",w.get_ref());
   let c1 = EndStream::new(7);
   let c2 = EndStream::new(4);
   let c3 = EndStream::new(2);
-  let mut ciphs = vec![c3,c2,c1];
+  let ciphs = vec![c3,c2,c1];
  
   // bigger buf than content
   let mut buf = vec![0;w.get_ref().len() + 10];
@@ -189,7 +180,6 @@ fn test_multendstream_inc_windows () {
       r = mciphs.read(&mut buf[..]).unwrap();
     }
     assert!(mciphs.read(&mut buf[..]).unwrap() == 0);
-    println!("FIRST readend");
     // manual read end to catch error
     assert!(mciphs.read_end().is_ok());
     assert!(buf[0] != 25);
@@ -244,7 +234,6 @@ impl ExtWrite for EndStream {
 
   #[inline]
   fn write_end<W : Write>(&mut self, r : &mut W) -> Result<()> {
-    println!("In endstream write_end {} {}", self.0, self.1);
     // padd with 2 for easier frame read (0 stop 1 continue
     let mut buffer = [2; 256];
     while self.1 != 0 {
@@ -270,10 +259,8 @@ impl ExtRead for EndStream {
   fn read_from<R : Read>(&mut self, r : &mut R, buf : &mut[u8]) -> Result<usize> {
 
     if self.1 == 0 {
-println!("readO");
       return Ok(0)
     }
-println!("nonreadO");
     let l = if self.1 < buf.len() {
       try!(r.read(&mut buf[..self.1]))
     } else {
@@ -292,7 +279,6 @@ println!("nonreadO");
         // ended window, need header for next (stuck to ret 0 up to read_end call)
         // the point of this write : getting a read at 0 at some point for unknow content read (for
         // instance encyphered bytes).
-println!("ok00000");
         return Ok(l)
       } else {
         // read next window
@@ -303,7 +289,6 @@ println!("ok00000");
   }
   #[inline]
   fn read_end<R : Read>(&mut self, r : &mut R) -> Result<()> {
-    println!("In endstream read_end {} {}", self.0, self.1);
     if self.1 == 0 {
       self.1 = self.0;
       Ok(())
@@ -318,14 +303,12 @@ println!("ok00000");
           } else {
             try!(r.read(&mut buffer[..self.1]))
           };
-      println!("read_end {}", l);
           self.1 -= l;
         }
 
         let ww = try!(r.read(&mut buffer[..1]));
         self.1 = self.0;
         if ww != 1  {
-          println!("ww{}",buffer[0]);
           return Err(Error::new(ErrorKind::Other, "End read does not find expected terminal 0 of windows"))
         }
       }

@@ -3,14 +3,14 @@
 use super::{
   ExtWrite,
   ExtRead,
-  CompWState,
+  //CompWState,
   CompRState,
   CompExtR,
   CompExtW,
   CompW,
   CompR,
-  MultiW,
-  MultiR,
+  //MultiW,
+  //MultiR,
   MultiWExt,
   new_multiw,
   MultiRExt,
@@ -22,8 +22,8 @@ use std::io::{
   Read,
   Cursor,
   Result,
-  Error,
-  ErrorKind,
+  //Error,
+  //ErrorKind,
 };
 
 use rand::thread_rng;
@@ -43,7 +43,6 @@ use self::endstream::{
   CEndStream,
 };
 
-use std::cell::RefCell;
 
 /// a composition writer doing nothing
 pub struct Void;
@@ -92,13 +91,12 @@ expect : &[u8],
   }
 
   let mut cin = cout;
-    println!("{:?}", cin.get_ref());
   cin.set_position(0);
   let c = &mut cin;
   let mut res = Vec::new();
   try!(r.read_header(c));
   let mut rl = size_first;
-  let mut l = 0;
+  let mut l;
   let mut vbuf = vec![0;buf_len];
   let mut first = true;
   let buf = &mut vbuf[..];
@@ -153,12 +151,10 @@ expect : &[u8],
  // try!(compw.flush());
   }
   let mut cin = cout;
-    println!("{:?}", cin.get_ref());
   cin.set_position(0);
 
   let mut rl = size_first;
-  println!("ss{}",size_first);
-  let mut l = 0;
+  let mut l;
   let mut res = Vec::new();
   let mut vbuf = vec![0;buf_len];
   let buf = &mut vbuf[..];
@@ -177,17 +173,14 @@ expect : &[u8],
       res.extend_from_slice(&buf[..l]);
       rl = rl - l;
     };
-    println!("bef re");
     try!(compr.suspend())
   };
-    println!("aft re");
   let mut compr = {
     try!(cin.read(&mut buf[..1]));
     assert!(123 == buf[0]);
     CompR::resume(&mut cin, state)
   };
   rl = size_second;
-  println!("ss{}",size_second);
   while {
     l = if rl == 0 {
       0
@@ -238,9 +231,8 @@ pub fn test_end_write<'a,'b,
   buf[0] = 123;
   try!(write.write(&buf[..1]));
   println!("befflush");
-  write.flush();
+  write.flush().unwrap();
 
-  println!("second");
   Ok(reference.into_inner())
 }
 
@@ -271,7 +263,6 @@ pub fn test_end_read<'a,'b,
     if i + rr > inp_length {
       if inp_length > i {
         let padstart = inp_length - i;
-        println !("pad start {}",padstart);
         assert!(buf[..padstart] == reference[i..]);
       } // else the window is bigger than buffer and padding is being read
     } else {
@@ -280,14 +271,11 @@ pub fn test_end_read<'a,'b,
     }
     i += rr;
   }
-println!("C");
   try!(bwr.read_end());
-  println!("{} >={}",i,inp_length);
   assert!(i >= inp_length);
   
 //  if endkind {
   let ni = try!(bwr.read(buf));
-  println!("nini{} {:?}",ni, &buf[..]);
   assert!(ni >= 1);
   assert!(123 == buf[0]);
 
@@ -356,12 +344,12 @@ fn test_suspend() {
   let state = {
   let mut void : CVoid<Cuvec> = CompW::new(&mut w, &mut v);
   checktype1(&void);
-  void.write(&[0]);
+  void.write(&[0]).unwrap();
   void.suspend().unwrap()
   };
-  w.write(&[0]);
+  w.write(&[0]).unwrap();
   let mut void : CVoid<Cuvec> = CompW::resume(&mut w, state);
-  void.write(&[0]);
+  void.write(&[0]).unwrap();
 }
 
 #[test]
@@ -374,25 +362,25 @@ fn test_suspend2() {
     let state = {
       let mut endcyph : CEndStream<CCiph<Cuvec>> = CompW::new(&mut cyph, &mut e);
       checktype2(&endcyph);
-      endcyph.write(&[0]);
+      endcyph.write(&[0]).unwrap();
       endcyph.suspend().unwrap()
     };
-    cyph.write(&[0]);
+    cyph.write(&[0]).unwrap();
     let state2 = {
     let mut endcyph : CEndStream<CCiph<Cuvec>> = CompW::resume(&mut cyph, state);
 
     // here check the type
 
-    endcyph.write(&[0]);
+    endcyph.write(&[0]).unwrap();
     endcyph.suspend().unwrap()
     };
     (cyph.suspend().unwrap(),state2)
   };
-  w.write(&[0]);
+  w.write(&[0]).unwrap();
   let mut cyph : CCiph<Cuvec> = CompW::resume(&mut w, state);
-  cyph.write(&[0]);
+  cyph.write(&[0]).unwrap();
   let mut endcyph : CEndStream<CCiph<Cuvec>> = CompW::resume(&mut cyph, statein);
-  endcyph.write(&[0]);
+  endcyph.write(&[0]).unwrap();
   //let mut void = CompW::resume(&mut w, state);
   //void.write(&[0]);
 }
@@ -419,7 +407,6 @@ fn test_ciph() {
 #[test]
 fn test_endstream() {
   let towrite_size = 123;
-  let ciphbuf = 7;
   let mut inner = Cursor::new(Vec::new());
   let reference = {
   let mut c = EndStream::new(15);
@@ -484,18 +471,19 @@ fn inst_ciph_end_mult () -> (Vec<CompExtW<EndStream, Ciph>>, Vec<CompExtR<EndStr
 
 #[test]
 fn test_ciph_end_mult () {
-  let (mut ciphs,mut ciphsr) = inst_ciph_end_mult ();
+  let (ciphs,ciphsr) = inst_ciph_end_mult ();
   let mut w = Cursor::new(Vec::new());
   { // write end in drop
     let mut mciphsext = MultiWExt::new(ciphs);
     let mut mciphs = new_multiw(&mut w, &mut mciphsext);
 
-    println!("actual write");
-    mciphs.write(&[123]);
-    mciphs.write_end();
-    mciphs.write(&[25]);
+    mciphs.write(&[123]).unwrap();
+    mciphs.write_end().unwrap();
+;
+    mciphs.write(&[25]).unwrap();
+;
   };
-  println!("debug mciphs {:?}",w.get_ref());
+  //println!("debug mciphs {:?}",w.get_ref());
 //[123, 0, 1, 0, 0, 1, 0, 0, 0, 25, 0, 1, 0, 0, 1, 0, 0, 0]
 
  
@@ -507,12 +495,10 @@ fn test_ciph_end_mult () {
     let mut mciphsext = MultiRExt::new(ciphsr);
     let mut mciphs = new_multir(&mut w, &mut mciphsext);
     let mut  r = mciphs.read(&mut buf[..]).unwrap();
-    println!("first{:?} {:?}",r,&buf[..10]);
     assert!(buf[0] == 123);
     // consume all kind of padding
     while r != 0 {
       let or = mciphs.read(&mut buf[..]);
-    println!("while{:?} {:?}",or,&buf[..10]);
       if !or.is_ok() {
         mciphs.2 = CompRState::Initial // avoid double panick TODO bug??
       }
@@ -521,7 +507,6 @@ fn test_ciph_end_mult () {
     }
 
     //assert!(mciphs.read(&mut buf[..]).unwrap() == 0);
-    println!("FIRST readend");
     // manual read end to catch error
     assert!(mciphs.read_end().is_ok());
     assert!(buf[0] != 25);
