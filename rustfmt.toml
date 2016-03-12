@@ -1,0 +1,17 @@
+max_width = 120
+ideal_width = 100
+fn_args_density = "Compressed"
+fn_call_width = 80
+fn_args_paren_newline = false
+tab_spaces = 2
+single_line_if_else = true
+fn_single_line = true
+match_block_trailing_comma = true
+fn_arg_indent = "Tabbed"
+where_indent = "Tabbed"
+where_pred_indent = "Tabbed"
+generics_indent = "Tabbed"
+chain_indent = "Tabbed"
+chain_base_indent = "Tabbed"
+#chain_base_indent = "Visual"
+#chain_base_indent = "Inherit"

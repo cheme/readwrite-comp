@@ -1,5 +1,4 @@
 
-
 use std::io::{
   Write,
   Read,
@@ -26,7 +25,6 @@ use super::{
   test_extwr,
   test_comp_one,
 };
-
 
 use std::num::Wrapping;
 
@@ -165,23 +163,16 @@ fn test_compext_r () {
 }
 
 
-
-
-
-
-
-
-
 #[test]
 fn test_ciph () {
   test_extwr(Ciph::new(2,2), Ciph::new(0,2),
   2,
-  &[&vec![1,2,3],&vec![4,5],&vec![6,7,8],&vec![9]],
+  &[&[1,2,3],&[4,5],&[6,7,8],&[9]],
   &[1,2,3,4,5,6,7,8,9]
   ).unwrap();
   test_comp_one(Ciph::new(9,1), Ciph::new(0,1),
   3,
-  &[&vec![1,2,3],&vec![4,5],&vec![6,7,8],&vec![9]],
+  &[&[1,2,3],&[4,5],&[6,7,8],&[9]],
   &[1,2,3,4,5,6,7,8,9]
   ).unwrap();
 
@@ -241,7 +232,7 @@ impl ExtWrite for Ciph {
       self.2 += l;
       if self.2 == self.1.len() {
         // do encode buffer when full onl
-        for i in self.1.iter_mut() {
+        for i in &mut self.1 {
           *i = shift_up(*i,self.0);
         }
         // forward enc buf
@@ -264,7 +255,7 @@ impl ExtWrite for Ciph {
       return Ok(())
     }
     // write buffer (all buffer so end is padding)
-    for i in self.1.iter_mut() {
+    for i in &mut self.1 {
       *i = shift_up(*i,self.0);
     }
     // forward enc buf
@@ -317,7 +308,7 @@ impl ExtRead for Ciph {
         tot += l;
         self.2 += l;
       }
-      for i in self.1.iter_mut() {
+      for i in &mut self.1 {
         *i = shift_down(*i,self.0);
       }
       self.2 = 0;

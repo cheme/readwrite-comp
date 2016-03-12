@@ -64,6 +64,12 @@
 //! mydht shadow (for example mydht-openssl).
 //!
 
+
+#![cfg_attr(feature="with-clippy", feature(plugin))]
+
+#![cfg_attr(feature="with-clippy", plugin(clippy))]
+
+
 #[cfg(test)]
 mod test;
 
@@ -146,11 +152,11 @@ pub trait ExtRead {
         Err(e) => return Err(e),
       }
     }
-    if !buf.is_empty() {
+    if buf.is_empty() {
+      Ok(())
+    } else {
       Err(Error::new(ErrorKind::UnexpectedEof,
                   "failed to fill whole buffer"))
-    } else {
-      Ok(())
     }
   }
 

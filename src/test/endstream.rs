@@ -30,7 +30,7 @@ fn test_read_end_multi_pad () {
 { 
   let out = &mut oute;
   ew.write_header(out).unwrap();
-  ew.write_into(out, &mut content).unwrap();
+  ew.write_into(out, &content).unwrap();
   ew.write_end(out).unwrap();
   ew.flush_into(out).unwrap();
   assert!(out.get_ref().len() == 6); // 1 2 1 (for next) 3 rpad 0
@@ -45,12 +45,12 @@ fn test_constant_size () {
   let mut ew = EndStream::new(2);
   let mut ew2 = EndStream::new(2);
   let mut er = EndStream::new(2);
-  let mut content = vec![1,2,3];
+  let content = vec![1,2,3];
   let mut oute = Cursor::new(Vec::new());
 { 
   let out = &mut oute;
   ew.write_header(out).unwrap();
-  ew.write_into(out, &mut content).unwrap();
+  ew.write_into(out, &content).unwrap();
   ew.write_end(out).unwrap();
   ew.flush_into(out).unwrap();
   assert!(out.get_ref().len() == 6); // 1 2 1 (for next) 3 rpad 0
@@ -84,12 +84,12 @@ fn test_constant_size () {
 fn test_endstream () {
   test_extwr(EndStream::new(2), EndStream::new(2),
   2,
-  &[&vec![1,2,3],&vec![4,5],&vec![6,7,8],&vec![9]],
+  &[&[1,2,3],&[4,5],&[6,7,8],&[9]],
   &[1,2,3,4,5,6,7,8,9]
   ).unwrap();
   test_comp_one(EndStream::new(1), EndStream::new(1),
   3,
-  &[&vec![1,2,3],&vec![4,5],&vec![6,7,8],&vec![9]],
+  &[&[1,2,3],&[4,5],&[6,7,8],&[9]],
   &[1,2,3,4,5,6,7,8,9]
   ).unwrap();
 }
