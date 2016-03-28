@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `CompW` struct in crate `readwrite_comp`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, CompW">
+
+    <title>readwrite_comp::CompW - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='index.html'>readwrite_comp</a></p><script>window.sidebarCurrent = {name: 'CompW', ty: 'struct', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content struct">
+<h1 class='fqn'><span class='in-band'>Struct <a href='index.html'>readwrite_comp</a>::<wbr><a class='struct' href=''>CompW</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a id='src-66' class='srclink' href='../src/readwrite_comp/src/lib.rs.html#205' title='goto source code'>[src]</a></span></h1>
+<pre class='rust struct'>pub struct CompW&lt;'a, 'b, W: 'a + <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html' title='std::io::Write'>Write</a>, EW: 'b + <a class='trait' href='../readwrite_comp/trait.ExtWrite.html' title='readwrite_comp::ExtWrite'>ExtWrite</a>&gt;(pub &amp;'a mut W, pub &amp;'b mut EW, pub <a class='enum' href='../readwrite_comp/enum.CompWState.html' title='readwrite_comp::CompWState'>CompWState</a>);</pre><div class='docblock'><p>Base construct to build a write upon another one (composable writer), using an ExtWrite
+implementation.</p>
+
+<p>This is used in many place with short lifecycle, it would be interesting to evaluate the 
+overhead (or see if it is optimized).</p>
+
+<p>When composing multiple ExtWrite, one could compose with multiple CompW , but as the first
+parameter is simply Write, write end will not be called recursively (for usage as a standard
+Write it is safe as write end will be called recursively through drop (yet with no catching of
+the possible errors).
+For composing with full support for write_end, consider only one layer of CompW and composing 
+the ExtWrit with a CompExtW composition.</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl&lt;'a, 'b, W: 'a + <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html' title='std::io::Write'>Write</a>, EW: 'b + <a class='trait' href='../readwrite_comp/trait.ExtWrite.html' title='readwrite_comp::ExtWrite'>ExtWrite</a>&gt; <a class='struct' href='../readwrite_comp/struct.CompW.html' title='readwrite_comp::CompW'>CompW</a>&lt;'a, 'b, W, EW&gt;</code></h3><div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>(w: &amp;'a mut W, ew: &amp;'b mut EW) -&gt; Self</code></h4>
+<h4 id='method.suspend' class='method'><code>fn <a href='#method.suspend' class='fnname'>suspend</a>(self) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(</a>&amp;'b mut EW, <a class='enum' href='../readwrite_comp/enum.CompWState.html' title='readwrite_comp::CompWState'>CompWState</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>)</a>&gt;</code></h4>
+<div class='docblock'><p>suspend write (inner writer is available again) but keep reference for subsequent write in same state</p>
+</div><h4 id='method.resume' class='method'><code>fn <a href='#method.resume' class='fnname'>resume</a>(with: &amp;'a mut W, from: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(</a>&amp;'b mut EW, <a class='enum' href='../readwrite_comp/enum.CompWState.html' title='readwrite_comp::CompWState'>CompWState</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>)</a>) -&gt; Self</code></h4>
+<h4 id='method.write_end' class='method'><code>fn <a href='#method.write_end' class='fnname'>write_end</a>(&amp;mut self) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>&gt;</code></h4>
+</div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><code>impl&lt;'a, 'b, W: 'a + <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html' title='std::io::Write'>Write</a>, EW: 'b + <a class='trait' href='../readwrite_comp/trait.ExtWrite.html' title='readwrite_comp::ExtWrite'>ExtWrite</a>&gt; <a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.Drop.html' title='core::ops::Drop'>Drop</a> for <a class='struct' href='../readwrite_comp/struct.CompW.html' title='readwrite_comp::CompW'>CompW</a>&lt;'a, 'b, W, EW&gt;</code></h3><div class='docblock'><p>drop finalize but without catching possible issue TODO error mgmt?? include logger ? Or upt to
+ExtWrite write_end implementation to be safe (return allways ok and synch over shared variable
+like arcmut or jus rc cell and have something else managing this error
+Drop is only for reference CompW, for Own compw drop does not exists and should no be used as 
+a Write.</p>
+</div><div class='impl-items'><h4 id='method.drop' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/core/ops/trait.Drop.html#method.drop' class='fnname'>drop</a>(&amp;mut self)</code></h4>
+</div><h3 class='impl'><code>impl&lt;'a, 'b, W: 'a + <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html' title='std::io::Write'>Write</a>, EW: 'b + <a class='trait' href='../readwrite_comp/trait.ExtWrite.html' title='readwrite_comp::ExtWrite'>ExtWrite</a>&gt; <a class='trait' href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html' title='std::io::Write'>Write</a> for <a class='struct' href='../readwrite_comp/struct.CompW.html' title='readwrite_comp::CompW'>CompW</a>&lt;'a, 'b, W, EW&gt;</code></h3><div class='docblock'><p>write_end support through drop only (should only be used as single write when
+write end error could be ignored).</p>
+</div><div class='impl-items'><h4 id='method.write' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html#method.write' class='fnname'>write</a>(&amp;mut self, cont: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>&amp;[</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>]</a>) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>&gt;</code></h4>
+<h4 id='method.flush' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html#method.flush' class='fnname'>flush</a>(&amp;mut self) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>&gt;</code></h4>
+<h4 id='method.write_all' class='method'><span class="since">1.0.0</span><code>fn <a href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html#method.write_all' class='fnname'>write_all</a>(&amp;mut self, buf: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>&amp;[</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a><a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.slice.html'>]</a>) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>&gt;</code></h4>
+<h4 id='method.write_fmt' class='method'><span class="since">1.0.0</span><code>fn <a href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html#method.write_fmt' class='fnname'>write_fmt</a>(&amp;mut self, fmt: <a class='struct' href='https://doc.rust-lang.org/nightly/core/fmt/struct.Arguments.html' title='core::fmt::Arguments'>Arguments</a>) -&gt; <a class='enum' href='https://doc.rust-lang.org/nightly/core/result/enum.Result.html' title='core::result::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>, <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>&gt;</code></h4>
+<h4 id='method.by_ref' class='method'><span class="since">1.0.0</span><code>fn <a href='https://doc.rust-lang.org/nightly/std/io/trait.Write.html#method.by_ref' class='fnname'>by_ref</a>(&amp;mut self) -&gt; &amp;mut Self</code></h4>
+</div></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "readwrite_comp";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script defer src="../search-index.js"></script>
+</body>
+</html>

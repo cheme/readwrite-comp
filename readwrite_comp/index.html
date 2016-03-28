@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `readwrite_comp` crate.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, readwrite_comp">
+
+    <title>readwrite_comp - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'></p><script>window.sidebarCurrent = {name: 'readwrite_comp', ty: 'mod', relpath: '../'};</script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content mod">
+<h1 class='fqn'><span class='in-band'>Crate <a class='mod' href=''>readwrite_comp</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a id='src-0' class='srclink' href='../src/readwrite_comp/src/lib.rs.html#1-786' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>This library purpose is to stack writers (and subsequently read with similar stack).</p>
+
+<p>This allow composition of writers.</p>
+
+<p>The library uses std::io::write and std::io::read for basis, but semantically Write and Read 
+implementation requires a bit of care (see examples).</p>
+
+<p>Ext trait add a possible header writing/reading and a possible end of message writing/reading. </p>
+
+<p>Read implementation should return the read size, and if read return 0 it means that the reading
+is finished. (read ext trait should finalize the read (waiting for a new header)).</p>
+
+<p>Most of this library is using WriteExt and ReadExt trait which allow to define additional
+action over standard read and write for example :
+- encyphering content : an additional header is required in most case.
+- adding info to content : like control, for instance an end of frame byte (required an end of
+message).
+- linking two reader or two writer (for instance CompExtW do it)
+The point is that WriteExt and ReadExt does not compose over the internal reader/writer to
+allow things such as MultiW or MultiR where we got a final Writer or final Reader but an
+undefined number of ExtWriter and ExtReader (and still static type without fat pointer).</p>
+
+<p>WriteExt and ReadExt could be composed, using MultiW/R or CopmExtW/R.</p>
+
+<p>WriteExt and ReadExt could be used as standard Reader or Writer by using CompW or CompR, </p>
+
+<p>Composition by creating CompW of CompW as Writer and CompW as WriterExt is not really
+encouraged (even if some test are included) due to difficulty to write header or end of message
+recursivly (the first component is seen as a Read or a Write). CompW should in priority as a
+last wrapper.
+CompExtWInner and CompExtRInner are an alternative to CompW and CompR with less overhead but no
+guaranties over header and end of message. (first they was private but prove usefull in some
+cases).</p>
+
+<p>Current issue with this crate are
+- drop cause panic in panic when read_end / write_end panic : leading to no clue about the issue
+- flush is not recursive : only the extWrite flush, the inner writer does not : TODO add a bool
+in flush_into to say if inner writer must be flush : that way on drop inner writer will not be
+flush (but still contain end_write), and have the composition flush flush all the way. Plus
+expose in object (CompW, MultiComp) this boolean. CompExtW is already recursive by default and
+should stay like that.
+: inner writer must flush at each layer. (MultiW flush until the inner writer of course)
+- flush and write_end semantic is tricky : flush means that no counterpart is needed in read
+  (we can flush anywhere without a failure from read) whereas write_end involve a read_end need.
+  Read_end is triggered manually with two cases :
+  - we know the length to read (for instance a serialized object read from a reader) : that is
+  easy and not a big issue
+  - we do not know the length (for instance proxy of encrypted content) : then a reader like
+  endstream could be used and read will block when seeing a end content by returning Ok(0)
+  until read_end is used to unlock the reading. There is a serious limitition here when
+  composing this kind of bloquing reader with non bloquing reader having some end content : the bloquing one must be in
+  the internal layer, otherwhise the end sequence of the non bloquing will be skipped (this is 
+  a somehow tricky case but also not so common (some cipher does not require end as using flush
+  is enough (endstream may still be used for perf when proxying content that we do not want to
+  read)).
+- symetry between read and write is not enforced, non symetric implementation will fail</p>
+
+<p>Example of usage could be found it tests, but also in mydht-base tunnel implementation,
+mydht-base bytes_wr and
+mydht shadow (for example mydht-openssl).</p>
+</div><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.CompExtR.html'
+                                  title='readwrite_comp::CompExtR'>CompExtR</a></td>
+                           <td class='docblock short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.CompExtRInner.html'
+                                  title='readwrite_comp::CompExtRInner'>CompExtRInner</a></td>
+                           <td class='docblock short'>
+                                <p>Inner construct to build a read upon another one, do not use as write if you need automatic
+header or automatic end (technical).</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.CompExtW.html'
+                                  title='readwrite_comp::CompExtW'>CompExtW</a></td>
+                           <td class='docblock short'>
+                                <p>Compose two ExtWrite in a single on with Owned ExtWrite.
+EW1 apply over EW2 meaning that EW2 is the external layer (ew2 header written first without
+applying ew1 over it and ew2 end written last without ew1 written over it and content written
+by first applying ew2 then ew1.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.CompExtWInner.html'
+                                  title='readwrite_comp::CompExtWInner'>CompExtWInner</a></td>
+                           <td class='docblock short'>
+                                <p>inner struct for implemention just to apply method of sw in write
+This is not to be use directly as write but just to use write_into and flush_into</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.CompR.html'
+                                  title='readwrite_comp::CompR'>CompR</a></td>
+                           <td class='docblock short'>
+                                <p>Base construct to build a read upon another one (composable reader).</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.CompW.html'
+                                  title='readwrite_comp::CompW'>CompW</a></td>
+                           <td class='docblock short'>
+                                <p>Base construct to build a write upon another one (composable writer), using an ExtWrite
+implementation.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.MultiRExt.html'
+                                  title='readwrite_comp::MultiRExt'>MultiRExt</a></td>
+                           <td class='docblock short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.MultiWExt.html'
+                                  title='readwrite_comp::MultiWExt'>MultiWExt</a></td>
+                           <td class='docblock short'>
+                                
+                           </td>
+                       </tr></table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='enum' href='enum.CompRState.html'
+                                  title='readwrite_comp::CompRState'>CompRState</a></td>
+                           <td class='docblock short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='enum' href='enum.CompWState.html'
+                                  title='readwrite_comp::CompWState'>CompWState</a></td>
+                           <td class='docblock short'>
+                                
+                           </td>
+                       </tr></table><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='trait' href='trait.ExtRead.html'
+                                  title='readwrite_comp::ExtRead'>ExtRead</a></td>
+                           <td class='docblock short'>
+                                <p>Compose over a reader with additional possibility to read an end content</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='trait' href='trait.ExtWrite.html'
+                                  title='readwrite_comp::ExtWrite'>ExtWrite</a></td>
+                           <td class='docblock short'>
+                                <p>Write with further common functionnalities.</p>
+                           </td>
+                       </tr></table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='fn' href='fn.new_multir.html'
+                                  title='readwrite_comp::new_multir'>new_multir</a></td>
+                           <td class='docblock short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='fn' href='fn.new_multiw.html'
+                                  title='readwrite_comp::new_multiw'>new_multiw</a></td>
+                           <td class='docblock short'>
+                                
+                           </td>
+                       </tr></table><h2 id='types' class='section-header'><a href="#types">Type Definitions</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.MultiR.html'
+                                  title='readwrite_comp::MultiR'>MultiR</a></td>
+                           <td class='docblock short'>
+                                <p>Multiple layered read (similar to MCompW).</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.MultiW.html'
+                                  title='readwrite_comp::MultiW'>MultiW</a></td>
+                           <td class='docblock short'>
+                                <p>CompW with several (undefined number at compile time) Write of same kind to chain, and a dest
+write.
+Drop semantic for use as write cannot be enable (inner temporary use of MCompW would write_end
+at each write).
+This could be use for layered write (for example in a multilayer ssl tunnel).</p>
+                           </td>
+                       </tr></table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "readwrite_comp";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script defer src="../search-index.js"></script>
+</body>
+</html>
