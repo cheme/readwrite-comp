@@ -84,6 +84,7 @@ use std::io::{
   ErrorKind,
 };
 use std::ops::Drop;
+use std::slice::Iter;
 
 /// Write with further common functionnalities.
 /// 
@@ -596,7 +597,7 @@ impl<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite> MCompW<'a,'b,W,EW> {
         }
         } else {
           // last
-          try!((self.1).get_mut(0).unwrap().write_end(&mut self.0));
+          try!((self.1).get_mut(0).unwrap().write_end(self.0));
         };
         self.2[0] = CompWState::Initial;
         Ok(())
@@ -623,7 +624,7 @@ impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> MCompR<'a,'b,R,ER> {
         }
         } else {
           // last
-          try!((self.1).get_mut(0).unwrap().read_end(&mut self.0));
+          try!((self.1).get_mut(0).unwrap().read_end(self.0));
         };
         self.2[0] = CompRState::Initial;
         Ok(())
@@ -673,6 +674,10 @@ pub fn new_multiw<'a, 'b, W : 'a + Write, EW : 'b + ExtWrite>
 */
 impl<EW : ExtWrite> MultiWExt<EW> {
   #[inline]
+  pub fn inner_extwrites(&self) -> &[EW] {
+    &self.0
+  }
+  #[inline]
   fn inner<'c,'b, W : Write>(&'c mut self, w : &'b mut W) -> MCompW<'b,'c,W,EW> {
     MCompW(w,&mut self.0[..],&mut self.1[..])
   }
@@ -690,6 +695,14 @@ impl<EW : ExtWrite> MultiWExt<EW> {
 
 
 impl<ER : ExtRead> MultiRExt<ER> {
+  #[inline]
+  pub fn len(&self) -> usize {
+    self.0.len()
+  }
+  #[inline]
+  pub fn iter(&self) -> Iter<ER> {
+    self.0.iter()
+  }
   #[inline]
   fn inner<'c,'b,R : Read>(&'c mut self, r : &'b mut R) -> MCompR<'b,'c,R,ER> {
     MCompR(r,&mut self.0[..],&mut self.1[..])
@@ -744,9 +757,7 @@ impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> Read for MCompR<'a,'b,R,ER> {
     }
     // last
     (self.1).get_mut(0).unwrap().read_from(self.0, buf)
- 
   }
-
 }
 
 impl<EW : ExtWrite> ExtWrite for MultiWExt<EW> {

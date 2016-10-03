@@ -10,7 +10,8 @@ repository = "https://github.com/cheme/readwrite-ext/"
 keywords =["Read","Write","compose","IO"]
 
 [features]
-default = ["with-clippy"]
+default = []
+#default = ["with-clippy"]
 nightly = []
 with-clippy = ["clippy"]
 
