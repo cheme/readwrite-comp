@@ -796,4 +796,52 @@ impl<EW : ExtRead> ExtRead for MultiRExt<EW> {
   }
 }
 
+/**
+ * No op reader/writer : do not comp
+ */
+pub struct ID ();
+impl ExtRead for ID {
+  #[inline]
+  fn read_from<R : Read>(&mut self, r : &mut R, buf: &mut [u8]) -> Result<usize> {
+    r.read(buf)
+  }
+  #[inline]
+  fn read_header<R : Read>(&mut self, _ : &mut R) -> Result<()> {
+    Ok(())
+  }
+  #[inline]
+  fn read_end<R : Read>(&mut self, _ : &mut R) -> Result<()> {
+    Ok(())
+  }
+  #[inline]
+  fn read_exact_from<R : Read>(&mut self, r : &mut R, mut buf: &mut[u8]) -> Result<()> {
+    r.read_exact(buf)
+  }
+}
+
+
+impl ExtWrite for ID {
+  #[inline]
+  fn write_header<W : Write>(&mut self, _ : &mut W) -> Result<()> {
+    Ok(())
+  }
+  #[inline]
+  fn write_end<W : Write>(&mut self, _ : &mut W) -> Result<()> {
+    Ok(())
+  }
+  #[inline]
+  fn write_into<W : Write>(&mut self, w : &mut W, cont: &[u8]) -> Result<usize> {
+    w.write(cont)
+  }
+  #[inline]
+  fn flush_into<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    w.flush()
+  }
+  #[inline]
+  fn write_all_into<W : Write>(&mut self, w : &mut W, buf : &[u8]) -> Result<()> {
+    w.write_all(buf)
+  }
+}
+
+
 
