@@ -678,6 +678,11 @@ impl<EW : ExtWrite> MultiWExt<EW> {
     &self.0
   }
   #[inline]
+  pub fn inner_extwrites_mut(&mut self) -> &mut [EW] {
+    &mut self.0
+  }
+ 
+  #[inline]
   fn inner<'c,'b, W : Write>(&'c mut self, w : &'b mut W) -> MCompW<'b,'c,W,EW> {
     MCompW(w,&mut self.0[..],&mut self.1[..])
   }
