@@ -20,7 +20,7 @@
 //! - linking two reader or two writer (for instance CompExtW do it)
 //! The point is that WriteExt and ReadExt does not compose over the internal reader/writer to
 //! allow things such as MultiW or MultiR where we got a final Writer or final Reader but an
-//! undefined number of ExtWriter and ExtReader (and still static type without fat pointer).
+//! undefined number of ExtWriter and ExtRead (and still static type without fat pointer).
 //!
 //! WriteExt and ReadExt could be composed, using MultiW/R or CopmExtW/R.
 //!
@@ -86,6 +86,9 @@ use std::io::{
 use std::ops::Drop;
 use std::slice::Iter;
 
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::cell::BorrowMutError;
 /// Write with further common functionnalities.
 /// 
 /// Compose over another Writer
@@ -161,10 +164,22 @@ pub trait ExtRead {
     }
   }
 
+  /// read up to first no content read and apply read_end
+  fn read_to_end<R : Read>(&mut self, r : &mut R, buf : &mut[u8]) -> Result<()> {
+    while { self.read_from(r,buf)? != 0} {}
+    self.read_end(r)
+  }
   /// read end bytes (and possibly update internal state).
   /// To use in a pure read write context, this is call on CompR Drop and should generally not need to be called manually.
   /// When the outer element of composition is removed drop finalize its action.
   fn read_end<R : Read>(&mut self, &mut R) -> Result<()>;
+
+  fn chain<'a, 'b, R : ExtRead + 'b>(&'a mut self, next : &'b mut R) -> ChainExtRead<'a,'b,Self,R> where Self: Sized + 'a {
+        ChainExtRead { first: self, second: next, done_first: false, second_header_done : false }
+  }
+  fn chain_with_initialized<'a, 'b, R : ExtRead + 'b>(&'a mut self, next : &'b mut R) -> ChainExtRead<'a,'b,Self,R> where Self: Sized + 'a {
+        ChainExtRead { first: self, second: next, done_first: false, second_header_done : true }
+  }
 
 }
 
@@ -483,9 +498,10 @@ impl<'a, 'b, R : 'a + Read, ER : 'b + ExtRead> Read for CompR<'a,'b,R,ER> {
   fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
     match self.2 {
       CompRState::Initial => {
-
           try!(self.1.read_header(self.0));
+//    panic!("dd");
           self.2 = CompRState::HeadRead;
+//    panic!("dd");
       },
       CompRState::HeadRead => (),
 /*      CompRState::ReadEnd => {
@@ -848,5 +864,254 @@ impl ExtWrite for ID {
   }
 }
 
+pub struct BorrowMutErr(BorrowMutError);
+impl From<BorrowMutErr> for Error {
+  #[inline]
+  fn from(e : BorrowMutErr) -> Error {
+    Error::new(ErrorKind::Other, e.0)
+  }
+}
+
+impl<ER : ExtRead> ExtRead for RefCell<ER> {
+  #[inline]
+  fn read_header<R : Read>(&mut self, r : &mut R) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.read_header(r)
+  }
+
+  #[inline]
+  fn read_from<R : Read>(&mut self, r : &mut R, buf : &mut[u8]) -> Result<usize> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.read_from(r,buf)
+  }
+
+  #[inline]
+  fn read_exact_from<R : Read>(&mut self, r : &mut R, mut buf: &mut[u8]) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.read_exact_from(r,buf)
+  }
+
+  #[inline]
+  fn read_end<R : Read>(&mut self, r : &mut R) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.read_end(r)
+  }
+
+}
+
+impl<EW : ExtWrite> ExtWrite for RefCell<EW> {
+  #[inline]
+  fn write_header<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.write_header(w)
+  }
+  #[inline]
+  fn write_into<W : Write>(&mut self, w : &mut W, cont : &[u8]) -> Result<usize> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.write_into(w,cont)
+  }
+  #[inline]
+  fn write_all_into<W : Write>(&mut self, w : &mut W, cont : &[u8]) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.write_all_into(w,cont)
+  }
+  #[inline]
+  fn flush_into<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.flush_into(w)
+  }
+  #[inline]
+  fn write_end<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.write_end(w)
+  }
+}
+
+impl<ER : ExtRead> ExtRead for Rc<RefCell<ER>> {
+  #[inline]
+  fn read_header<R : Read>(&mut self, r : &mut R) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.read_header(r)
+  }
+
+  #[inline]
+  fn read_from<R : Read>(&mut self, r : &mut R, buf : &mut[u8]) -> Result<usize> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.read_from(r,buf)
+  }
+
+  #[inline]
+  fn read_exact_from<R : Read>(&mut self, r : &mut R, mut buf: &mut[u8]) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.read_exact_from(r,buf)
+  }
+
+  #[inline]
+  fn read_end<R : Read>(&mut self, r : &mut R) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.read_end(r)
+  }
+
+}
+
+impl<EW : ExtWrite> ExtWrite for Rc<RefCell<EW>> {
+  #[inline]
+  fn write_header<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.write_header(w)
+  }
+  #[inline]
+  fn write_into<W : Write>(&mut self, w : &mut W, cont : &[u8]) -> Result<usize> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.write_into(w,cont)
+  }
+  #[inline]
+  fn write_all_into<W : Write>(&mut self, w : &mut W, cont : &[u8]) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.write_all_into(w,cont)
+  }
+  #[inline]
+  fn flush_into<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.flush_into(w)
+  }
+  #[inline]
+  fn write_end<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
+    inner.write_end(w)
+  }
+}
+/// Chain two extreader, read end of first and header of second (if needed) as soon as it read 0 length content
+/// TODO test case!!
+pub struct ChainExtRead<'a, 'b, T : ExtRead + 'a, U : ExtRead + 'b> {
+    first: &'a mut T,
+    second: &'b mut U,
+    done_first: bool,
+    second_header_done : bool,
+}
+
+impl<'a, 'b, T : ExtRead + 'a, U : ExtRead + 'b> ChainExtRead<'a,'b,T,U> {
+  pub fn in_first (&self) -> bool { !self.done_first }
+  pub fn in_second (&self) -> bool { self.done_first }
+  #[inline]
+  fn switch_to_second<R : Read> (&mut self, r : &mut R) -> Result<()> {
+
+    self.first.read_end(r)?;
+    self.done_first = true;
+    if !self.second_header_done {
+      self.second.read_header(r)?;
+      // self.second_header_done = true;
+    }
+    Ok(())
+  }
+}
+
+impl<'a, 'b, T : ExtRead + 'a, U : ExtRead + 'b> ExtRead for ChainExtRead<'a,'b,T,U> {
+  #[inline]
+  fn read_header<R : Read>(&mut self, r : &mut R) -> Result<()> {
+    self.first.read_header(r)
+  }
+
+  fn read_from<R : Read>(&mut self, r : &mut R, buf: &mut[u8]) -> Result<usize> {
+    if !self.done_first {
+      let i = self.first.read_from(r,buf)?;
+      if i == 0 {
+        self.switch_to_second(r)?;
+        self.second.read_from(r,buf)
+      } else {
+        Ok(i)
+      }
+    } else {
+      self.second.read_from(r,buf)
+    }
+  }
+
+  fn read_exact_from<R : Read>(&mut self, r : &mut R, buf: &mut[u8]) -> Result<()> {
+    let mut i = 0;
+    if !self.done_first {
+      loop {
+        let iit = self.first.read_from(r,&mut buf[i..])?;
+        i += iit;
+        if iit == 0 {
+          self.switch_to_second(r)?;
+          break;
+        }
+      }
+      if i == buf.len() {
+        return Ok(())
+      }
+    }
+    self.second.read_exact_from(r,&mut buf[i..])
+  }
+  
+  fn read_end<R : Read>(&mut self, r : &mut R) -> Result<()> {
+    if !self.done_first {
+      self.switch_to_second(r)?
+    }
+    self.second.read_end(r)?;
+    // reinit reader (costless)
+    self.done_first = false;
+    self.second_header_done = false;
+    Ok(())
+  }
+}
 
 
+/// similar to ID but using default trait implementation
+pub struct DefaultID();
+impl ExtRead for DefaultID {
+  #[inline]
+  fn read_from<R : Read>(&mut self, r : &mut R, buf: &mut [u8]) -> Result<usize> {
+    r.read(buf)
+  }
+  #[inline]
+  fn read_header<R : Read>(&mut self, _ : &mut R) -> Result<()> {
+    Ok(())
+  }
+  #[inline]
+  fn read_end<R : Read>(&mut self, _ : &mut R) -> Result<()> {
+    Ok(())
+  }
+}
+
+
+impl ExtWrite for DefaultID {
+  #[inline]
+  fn write_header<W : Write>(&mut self, _ : &mut W) -> Result<()> {
+    Ok(())
+  }
+  #[inline]
+  fn write_end<W : Write>(&mut self, _ : &mut W) -> Result<()> {
+    Ok(())
+  }
+  #[inline]
+  fn write_into<W : Write>(&mut self, w : &mut W, cont: &[u8]) -> Result<usize> {
+    w.write(cont)
+  }
+}
+
+
+impl<'a, EW : ExtWrite> ExtWrite for &'a mut EW {
+  #[inline]
+  fn write_header<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    (*self).write_header(w)
+  }
+  #[inline]
+  fn write_end<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    (*self).write_end(w)
+  }
+  #[inline]
+  fn write_into<W : Write>(&mut self, w : &mut W, cont: &[u8]) -> Result<usize> {
+    (*self).write_into(w,cont)
+  }
+  #[inline]
+  fn write_all_into<W : Write>(&mut self, w : &mut W, cont: &[u8]) -> Result<()> {
+    (*self).write_all_into(w,cont)
+  }
+  #[inline]
+  fn flush_into<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    (*self).flush_into(w)
+  }
+}
+// TODO loop reader struct where on read 0 we read end automatically and read header again
+//

@@ -25,7 +25,7 @@ use super::{
 fn test_read_end_multi_pad () {
   let mut ew = EndStream::new(2);
   let mut er = EndStream::new(2);
-  let mut content = vec![1,2,3];
+  let content = vec![1,2,3];
   let mut oute = Cursor::new(Vec::new());
 { 
   let out = &mut oute;
