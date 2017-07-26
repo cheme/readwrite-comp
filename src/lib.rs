@@ -1117,7 +1117,7 @@ impl<'a, EW : ExtWrite> ExtWrite for &'a mut EW {
 
 
 /// partial extread to reuse default implementation explicitly
-pub struct ReadDefImpl<'a,R : ExtRead + 'a>(&'a mut R);
+pub struct ReadDefImpl<'a,R : ExtRead + 'a>(pub &'a mut R);
 impl<'a,RE : ExtRead> ExtRead for ReadDefImpl<'a,RE> {
   #[inline]
   fn read_from<R : Read>(&mut self, r : &mut R, buf: &mut [u8]) -> Result<usize> {
@@ -1135,7 +1135,7 @@ impl<'a,RE : ExtRead> ExtRead for ReadDefImpl<'a,RE> {
 
 
 /// partial extread to reuse default implementation explicitly
-pub struct WriteDefImpl<'a,W : ExtWrite + 'a>(&'a mut W);
+pub struct WriteDefImpl<'a,W : ExtWrite + 'a>(pub &'a mut W);
 
 impl<'a,WR : ExtWrite> ExtWrite for WriteDefImpl<'a,WR> {
   #[inline]
