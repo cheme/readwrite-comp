@@ -1113,5 +1113,44 @@ impl<'a, EW : ExtWrite> ExtWrite for &'a mut EW {
     (*self).flush_into(w)
   }
 }
+
+
+
+/// partial extread to reuse default implementation explicitly
+pub struct ReadDefImpl<'a,R : ExtRead + 'a>(&'a mut R);
+impl<'a,RE : ExtRead> ExtRead for ReadDefImpl<'a,RE> {
+  #[inline]
+  fn read_from<R : Read>(&mut self, r : &mut R, buf: &mut [u8]) -> Result<usize> {
+    self.0.read_from(r,buf)
+  }
+  #[inline]
+  fn read_header<R : Read>(&mut self, r : &mut R) -> Result<()> {
+    self.0.read_header(r)
+  }
+  #[inline]
+  fn read_end<R : Read>(&mut self, r : &mut R) -> Result<()> {
+    self.0.read_end(r)
+  }
+}
+
+
+/// partial extread to reuse default implementation explicitly
+pub struct WriteDefImpl<'a,W : ExtWrite + 'a>(&'a mut W);
+
+impl<'a,WR : ExtWrite> ExtWrite for WriteDefImpl<'a,WR> {
+  #[inline]
+  fn write_header<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    self.0.write_header(w)
+  }
+  #[inline]
+  fn write_end<W : Write>(&mut self, w : &mut W) -> Result<()> {
+    self.0.write_end(w)
+  }
+  #[inline]
+  fn write_into<W : Write>(&mut self, w : &mut W, cont: &[u8]) -> Result<usize> {
+    self.0.write_into(w,cont)
+  }
+}
+
 // TODO loop reader struct where on read 0 we read end automatically and read header again
 //
