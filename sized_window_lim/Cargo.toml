@@ -1,0 +1,22 @@
+[package]
+
+name = "sized_windows_lim"
+version = "0.0.1"
+authors = ["Emeric Chevalier <emericchevalier.pro@gmail.com>"]
+description = "A Read write comp limiter implementation"
+documentation = "http://cheme.github.io/readwrite-comp/"
+homepage = "https://github.com/cheme/readwrite-ext/"
+repository = "https://github.com/cheme/readwrite-ext/"
+keywords =["Read","Write","compose","IO","limiter"]
+
+
+
+[dependencies]
+rand = "~0.3.17"
+byteorder = "~1.1.0"
+
+[dependencies.readwrite-comp]
+path = "../readwrite-comp/"
+
+[dependencies.readwrite-comp-test]
+path = "../readwrite-comp-test/"

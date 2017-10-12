@@ -198,6 +198,7 @@ fn test_multendstream_inc_windows () {
 /// what is in content). After N read byte if 0 end if 1 continu for N next bytes.
 /// First is window size (renewable with padding if flushed or end).
 /// Second is counter of byte written for this window.
+/// This is only for testing, very redundant with 'sized_window_lim' crates
 #[derive(Clone)]
 pub struct EndStream(usize,usize); 
 

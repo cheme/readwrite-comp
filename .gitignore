@@ -1,5 +1,4 @@
 *.swp
-*.lock
 *.bk
 target/
 Cargo.toml.local

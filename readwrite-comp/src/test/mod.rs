@@ -29,7 +29,6 @@ use std::io::{
 use rand::thread_rng;
 use rand::Rng;
 
-
 pub mod endstream;
 pub mod ciph;
 
@@ -321,14 +320,6 @@ fn test_void () {
 
 /// As a type alias no need to have R an W variant (no type constraint on type alias yet)
 type CVoid<'a,'b,A> = CompW<'a,'b,A,Void>;
-/// compose of EndStream over ciph
-/// As a type alias no need to have R an W variant (no type constraint on type alias yet)
-/// To use End read_end fonctionality it needs to be an outer one (otherwhise read end could not be
-/// signaled).
-type EndCiph<'a,'b,A> = CEndStream<'a,'b,CCiph<'b,'b,A>>;
-
-/// EndCiph + Void for three layer
-type EndCiphVoid<'a,'b,A> = EndCiph<'a,'b,CVoid<'b,'b,A>>;
 
 type Cuvec = Cursor<Vec<u8>>;
 
@@ -520,4 +511,8 @@ fn test_ciph_end_mult () {
   };
 
 }
+
+
+
+
 

@@ -16,7 +16,7 @@ nightly = []
 with-clippy = ["clippy"]
 
 [dev-dependencies]
-rand = "0.3.11"
+rand = "~0.3.17"
 
 [dependencies]
 clippy = {optional = true, git = "https://github.com/Manishearth/rust-clippy.git"}

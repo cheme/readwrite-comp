@@ -69,9 +69,8 @@
 
 #![cfg_attr(feature="with-clippy", plugin(clippy))]
 
-
 #[cfg(test)]
-mod test;
+pub mod test;
 
 #[cfg(test)]
 extern crate rand;
@@ -292,7 +291,7 @@ impl<EW1 : ExtRead, EW2 : ExtRead> ExtRead for CompExtR<EW1, EW2> {
   }
 
   #[inline]
-  fn read_exact_from<R : Read>(&mut self, r : &mut R, mut buf: &mut[u8]) -> Result<()> {
+  fn read_exact_from<R : Read>(&mut self, r : &mut R, buf: &mut[u8]) -> Result<()> {
     self.0.read_exact_from(&mut CompExtRInner(r, &mut self.1),buf)
   }
 
@@ -835,7 +834,7 @@ impl ExtRead for ID {
     Ok(())
   }
   #[inline]
-  fn read_exact_from<R : Read>(&mut self, r : &mut R, mut buf: &mut[u8]) -> Result<()> {
+  fn read_exact_from<R : Read>(&mut self, r : &mut R, buf: &mut[u8]) -> Result<()> {
     r.read_exact(buf)
   }
 }
@@ -886,7 +885,7 @@ impl<ER : ExtRead> ExtRead for RefCell<ER> {
   }
 
   #[inline]
-  fn read_exact_from<R : Read>(&mut self, r : &mut R, mut buf: &mut[u8]) -> Result<()> {
+  fn read_exact_from<R : Read>(&mut self, r : &mut R, buf: &mut[u8]) -> Result<()> {
     let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
     inner.read_exact_from(r,buf)
   }
@@ -941,7 +940,7 @@ impl<ER : ExtRead> ExtRead for Rc<RefCell<ER>> {
   }
 
   #[inline]
-  fn read_exact_from<R : Read>(&mut self, r : &mut R, mut buf: &mut[u8]) -> Result<()> {
+  fn read_exact_from<R : Read>(&mut self, r : &mut R, buf: &mut[u8]) -> Result<()> {
     let mut inner = try!(self.try_borrow_mut().map_err(|e|BorrowMutErr(e)));
     inner.read_exact_from(r,buf)
   }

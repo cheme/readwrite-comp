@@ -1,0 +1,18 @@
+[package]
+
+name = "escap_term_lim"
+version = "0.0.1"
+authors = ["Emeric Chevalier <emericchevalier.pro@gmail.com>"]
+description = "A Read write comp limiter implementation"
+documentation = "http://cheme.github.io/readwrite-comp/"
+homepage = "https://github.com/cheme/readwrite-ext/"
+repository = "https://github.com/cheme/readwrite-ext/"
+keywords =["Read","Write","compose","IO","limiter"]
+
+
+
+
+[dependencies.readwrite-comp]
+path = "../readwrite-comp/"
+[dependencies.readwrite-comp-test]
+path = "../readwrite-comp-test/"
