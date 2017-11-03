@@ -186,7 +186,6 @@ impl<P : SizedWindowsParams> ExtRead for SizedWindows<P> {
       self.winrem = P::INIT_SIZE;
       Ok(())
     } else {
-      println!("winrem:{:?}",self.winrem);
     // TODO buffer is needed here -> see if Read interface should not have a fn drop where we read
       // without buffer and drop content. For now hardcoded buffer length...
       let mut buffer = [0; 256];
