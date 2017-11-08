@@ -26,6 +26,7 @@ use byteorder::{
 /// conf trait
 pub trait SizedWindowsParams {
   const INIT_SIZE : usize;
+  const MAX_SIZE : usize;
   const GROWTH_RATIO : Option<(usize,usize)>;
   /// size of window is written, this way INIT_size and growth_ratio may diverge (multiple
   /// profiles)
@@ -38,6 +39,7 @@ pub trait SizedWindowsParams {
 pub struct SizedWindows<P : SizedWindowsParams>  {
   init_size : usize, // TODO rename to last_size
   winrem : usize,
+  resizable : bool,
   _p : PhantomData<P>,
 }
 
@@ -47,6 +49,7 @@ impl<P : SizedWindowsParams> SizedWindows<P> {
     SizedWindows {
       init_size : P::INIT_SIZE,
       winrem : P::INIT_SIZE,
+      resizable : P::GROWTH_RATIO.is_some(),
       _p : PhantomData,
     }
   }
@@ -56,9 +59,21 @@ impl<P : SizedWindowsParams> SizedWindows<P> {
     self.winrem = if P::WRITE_SIZE {
       try!(r.read_u64::<LittleEndian>()) as usize
     } else {
-      match P::GROWTH_RATIO {
-         Some((n,d)) => self.init_size * n / d,
-         None => P::INIT_SIZE,
+      if self.resizable {
+        match P::GROWTH_RATIO {
+          Some((n,d)) => {
+            let n_size = self.init_size * n / d;
+            if n_size < P::MAX_SIZE {
+              n_size
+            } else {
+              self.resizable = false;
+              P::MAX_SIZE
+            }
+          },
+          None => P::INIT_SIZE,
+        }
+      } else {
+        self.init_size
       }
     };
     self.init_size = self.winrem;
@@ -83,9 +98,21 @@ impl<P : SizedWindowsParams> ExtWrite for SizedWindows<P> {
       if self.winrem == 0 {
 
         // init next winrem
-        self.winrem = match P::GROWTH_RATIO {
-            Some((n,d)) => self.init_size * n / d,
+        self.winrem = if self.resizable {
+          match P::GROWTH_RATIO {
+            Some((n,d)) => {
+              let n_size = self.init_size * n / d;
+              if n_size < P::MAX_SIZE {
+                n_size
+              } else {
+                self.resizable = false;
+                P::MAX_SIZE
+              }
+            },
             None => P::INIT_SIZE,
+          }
+        } else {
+          self.init_size
         };
 
         self.init_size = self.winrem;
@@ -170,7 +197,6 @@ impl<P : SizedWindowsParams> ExtRead for SizedWindows<P> {
         // ended (case where there is no padding or we do not know what we read and read also
         // the padding)
         self.init_size = 0;
-        return Ok(rr)
       } else {
         // new window and drop this byte
         try!(self.next_winsize(r));
@@ -244,21 +270,25 @@ mod test {
 
   impl SizedWindowsParams for Params1 {
       const INIT_SIZE : usize = 20;
+      const MAX_SIZE : usize = 2048;
       const GROWTH_RATIO : Option<(usize,usize)> = Some((4,3));
       const WRITE_SIZE : bool = false;
   }
   impl SizedWindowsParams for Params2 {
       const INIT_SIZE : usize = 20;
+      const MAX_SIZE : usize = 2048;
       const GROWTH_RATIO : Option<(usize,usize)> = None;
       const WRITE_SIZE : bool = false;
   }
   impl SizedWindowsParams for Params3 {
       const INIT_SIZE : usize = 20;
+      const MAX_SIZE : usize = 2048;
       const GROWTH_RATIO : Option<(usize,usize)> = Some((4,3));
       const WRITE_SIZE : bool = true;
   }
   impl SizedWindowsParams for Params4 {
       const INIT_SIZE : usize = 20;
+      const MAX_SIZE : usize = 2048;
       const GROWTH_RATIO : Option<(usize,usize)> = None;
       const WRITE_SIZE : bool = true;
   }
