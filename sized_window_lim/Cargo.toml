@@ -17,6 +17,7 @@ byteorder = "~1.1.0"
 
 [dependencies.readwrite-comp]
 path = "../readwrite-comp/"
+#git = "https://github.com/cheme/readwrite-comp.git" 
 
 [dependencies.readwrite-comp-test]
 path = "../readwrite-comp-test/"
